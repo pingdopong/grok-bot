@@ -30,3 +30,9 @@ node_modules/
 /mermaid.core-*.js
 /xlsx-*.js
 /index.html
+
+# [FORK] Este fork nao redistribui os instaladores originais da Anysphere.
+# Uma copia local segue suportada pelo bootstrap; ela so nao pode ser versionada.
+# Ver ATTRIBUTION.md e docs/fork/decisions/0005-remocao-dos-instaladores-lfs.md.
+/research-archives/original/**/*.dmg
+/research-archives/original/**/*.exe

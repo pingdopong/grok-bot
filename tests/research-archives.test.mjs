@@ -1,46 +1,70 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import { createReadStream } from "node:fs";
-import { lstat, readFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
+
+// [FORK] Substitui o teste do upstream, que exigia os dois instaladores originais
+// presentes via Git LFS e conferia bytes e SHA-256 de cada um. Este fork nao
+// redistribui esses binarios proprietarios: o inventario e a proveniencia
+// continuam versionados, os arquivos nao. Ver ATTRIBUTION.md e
+// docs/fork/decisions/0005-remocao-dos-instaladores-lfs.md.
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const archiveRoot = path.join(repositoryRoot, "research-archives", "original", "0.18.0");
 
-async function sha256(file) {
-  const hash = createHash("sha256");
-  for await (const chunk of createReadStream(file)) hash.update(chunk);
-  return hash.digest("hex");
+async function manifest() {
+  return JSON.parse(await readFile(path.join(archiveRoot, "artifacts.json"), "utf8"));
 }
 
-test("preserved 0.18.0 installers match the exact public release inventory", async () => {
-  const manifest = JSON.parse(await readFile(path.join(archiveRoot, "artifacts.json"), "utf8"));
-  assert.deepEqual(Object.keys(manifest).sort(), ["artifacts", "product", "schemaVersion", "version"]);
-  assert.equal(manifest.schemaVersion, 1);
-  assert.equal(manifest.product, "Grok Bot");
-  assert.equal(manifest.version, "0.18.0");
-  assert.equal(manifest.artifacts.length, 2);
+test("the preserved release inventory still describes both 0.18.0 installers", async () => {
+  const inventory = await manifest();
+  assert.deepEqual(Object.keys(inventory).sort(), ["artifacts", "product", "schemaVersion", "version"]);
+  assert.equal(inventory.schemaVersion, 1);
+  assert.equal(inventory.product, "Grok Bot");
+  assert.equal(inventory.version, "0.18.0");
+  assert.equal(inventory.artifacts.length, 2);
 
-  for (const artifact of manifest.artifacts) {
+  const sums = await readFile(path.join(archiveRoot, "SHA256SUMS"), "utf8");
+  for (const artifact of inventory.artifacts) {
     assert.deepEqual(
       Object.keys(artifact).sort(),
       ["architecture", "bytes", "path", "platform", "sha256", "sourceUrl"],
     );
     assert.match(artifact.path, /^(macos-arm64\/[^/]+\.dmg|windows-x64\/[^/]+\.exe)$/);
     assert.match(artifact.sha256, /^[0-9a-f]{64}$/);
+    assert.ok(Number.isInteger(artifact.bytes) && artifact.bytes > 0);
     assert.match(artifact.sourceUrl, /^https:\/\/downloads\.cursor\.com\/grokbot\/stable\//);
-    const file = path.join(archiveRoot, artifact.path);
-    assert.ok(file.startsWith(`${archiveRoot}${path.sep}`));
-    const metadata = await lstat(file);
-    assert.equal(metadata.isFile(), true);
-    assert.equal(metadata.isSymbolicLink(), false);
-    assert.equal(metadata.size, artifact.bytes, `${artifact.path} requires git lfs pull`);
-    assert.equal(await sha256(file), artifact.sha256);
+    assert.ok(
+      sums.includes(`${artifact.sha256}  ${artifact.path}`),
+      `SHA256SUMS must list ${artifact.path} with the manifest digest`,
+    );
   }
 });
 
-test("bootstrap prefers the hash-pinned local archive before the network", async () => {
+test("this fork does not track the upstream installers", async () => {
+  const inventory = await manifest();
+  const tracked = execFileSync("git", ["ls-files", "--", "research-archives/original"], {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+  })
+    .split("\n")
+    .filter(Boolean);
+
+  for (const artifact of inventory.artifacts) {
+    const relative = `research-archives/original/0.18.0/${artifact.path}`;
+    assert.ok(
+      !tracked.includes(relative),
+      `${relative} must not be versioned in this fork; a local copy stays supported but untracked`,
+    );
+  }
+
+  const ignore = await readFile(path.join(repositoryRoot, ".gitignore"), "utf8");
+  assert.match(ignore, /^\/research-archives\/original\/\*\*\/\*\.dmg$/m);
+  assert.match(ignore, /^\/research-archives\/original\/\*\*\/\*\.exe$/m);
+});
+
+test("bootstrap prefers a local archive and falls back to the pinned URL", async () => {
   const [attributes, config, bootstrap] = await Promise.all([
     readFile(path.join(repositoryRoot, ".gitattributes"), "utf8"),
     readFile(path.join(repositoryRoot, "scripts", "lib", "config.mjs"), "utf8"),
@@ -48,9 +72,15 @@ test("bootstrap prefers the hash-pinned local archive before the network", async
   ]);
   assert.match(attributes, /research-archives\/original\/\*\*\/\*\.dmg filter=lfs diff=lfs merge=lfs -text/);
   assert.match(attributes, /research-archives\/original\/\*\*\/\*\.exe filter=lfs diff=lfs merge=lfs -text/);
-  assert.match(config, /export const archivedDmg = path\.join\(repoRoot, "research-archives", "original", "0\.18\.0", "macos-arm64", "Grok_Bot_0\.18\.0\.dmg"\)/);
-  assert.match(bootstrap, /const archivedDigest = await sha256\(archivedDmg\)/);
-  assert.match(bootstrap, /if \(archivedDigest !== dmgSha256\)/);
+  assert.match(
+    config,
+    /export const archivedDmg = path\.join\(repoRoot, "research-archives", "original", "0\.18\.0", "macos-arm64", "Grok_Bot_0\.18\.0\.dmg"\)/,
+  );
+  assert.match(bootstrap, /if \(await exists\(archivedDmg\)\)/);
   assert.match(bootstrap, /await copyFile\(archivedDmg, cachedDmg\)/);
-  assert.ok(bootstrap.indexOf("await copyFile(archivedDmg, cachedDmg)") < bootstrap.indexOf("await fetch(dmgUrl"));
+  assert.match(bootstrap, /await fetch\(dmgUrl/);
+  assert.ok(
+    bootstrap.indexOf("await copyFile(archivedDmg, cachedDmg)") < bootstrap.indexOf("await fetch(dmgUrl"),
+    "the archived copy must be preferred over the network",
+  );
 });

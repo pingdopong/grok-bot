@@ -46,4 +46,17 @@ Every edit to a file authored upstream is marked in place with a `[FORK]` commen
 
 - **Removed the inherited CI workflow** (`.github/workflows/check.yml`). It triggered on every
   push to every branch. This fork builds its own workflows instead.
+- **Removed the preserved upstream installers** from the tracked tree:
+  `research-archives/original/0.18.0/macos-arm64/Grok_Bot_0.18.0.dmg` and
+  `research-archives/original/0.18.0/windows-x64/Grok_Bot_0.18.0_Setup.exe`. These are Anysphere's
+  own distributed binaries and this fork does not host or redistribute them. The provenance record
+  stays: `artifacts.json`, `SHA256SUMS`, and `research-archives/README.md` are untouched, and
+  `scripts/bootstrap-runtime.mjs` still resolves a local copy first and falls back to the pinned
+  upstream URL, so the documented build path is unchanged.
+
+  Two honest caveats. First, this is a removal at `HEAD`, not a history rewrite: a fork shares its
+  object store with the upstream network, so rewriting would erase nothing while breaking the fork
+  relationship. The objects remain reachable through upstream's history; what changes is that our
+  branch no longer distributes them. Second, `tests/research-archives.test.mjs` was rewritten,
+  because the upstream version asserted that both binaries were present and checksum-matching.
 - **Added this file.**
