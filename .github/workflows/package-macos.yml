@@ -56,6 +56,28 @@ jobs:
           path: apps/desktop/.cache/downloads
           key: grokbot-dmg-a253ccd8aab01e083f9812a0264354c5034d8ba7f0610bbb557e82ae77d203eb
 
+      # A URL fixada do upstream respondeu 403 em 2026-08-31, tanto do CI quanto
+      # de IP residencial. Sem esta checagem, o bootstrap falha com um stack
+      # trace de HTTP 403 que nao explica nada a quem le o log.
+      # Ver docs/fork/UPSTREAM-WATCH.md.
+      - name: Confirma que o artefato fixado esta acessivel
+        run: |
+          if ls apps/desktop/.cache/downloads/*.dmg >/dev/null 2>&1; then
+            echo "Copia local encontrada no cache; segue sem rede."
+            exit 0
+          fi
+          url='https://downloads.cursor.com/grokbot/stable/darwin-arm64/0.18.0/Grok_Bot_0.18.0.dmg'
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -r 0-0 "$url" || echo 000)
+          if [ "$code" = "200" ] || [ "$code" = "206" ]; then
+            echo "Artefato acessivel (HTTP $code)."
+            exit 0
+          fi
+          echo "::error::O artefato 0.18.0 fixado respondeu HTTP $code, e nao ha copia em cache."
+          echo "::error::Empacotar exige trazer o artefato: GROK_BOT_018_APP apontando para uma"
+          echo "::error::copia instalada, ou o DMG em apps/desktop/.cache/downloads/."
+          echo "::error::Este repositorio nao hospeda o binario. Ver docs/fork/UPSTREAM-WATCH.md."
+          exit 1
+
       - name: Bootstrap
         run: pnpm --filter @pingdopong/desktop run bootstrap
 
