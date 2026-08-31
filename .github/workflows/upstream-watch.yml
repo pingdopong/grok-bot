@@ -60,13 +60,28 @@ jobs:
             echo "Se houver commits novos, o sync sai em PR proprio, nunca direto na main."
             echo "Por causa do layout, o merge usa: git merge -X subtree=apps/desktop"
             echo "Ver docs/fork/decisions/0003-mover-para-apps-desktop.md"
-          } > issue-body.md
+          } > alerta.md
 
           title="Upstream mudou de estado"
-          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$title in:title" --json number --jq '.[0].number // empty')
 
-          if [ -n "$existing" ]; then
-            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body-file issue-body.md
+          # O alerta nao pode depender de issues estarem habilitadas: forks do
+          # GitHub nascem com issues desligadas, e este esta assim. O sinal
+          # primario e o resumo do job somado a falha deliberada no final --
+          # um workflow agendado que falha notifica quem mantem o repositorio,
+          # independente de qualquer configuracao opcional. A issue e um bonus.
+          cat alerta.md >> "$GITHUB_STEP_SUMMARY"
+          cat alerta.md
+
+          if gh issue list --repo "$GITHUB_REPOSITORY" --limit 1 >/dev/null 2>&1; then
+            existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$title in:title" --json number --jq '.[0].number // empty')
+            if [ -n "$existing" ]; then
+              gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body-file alerta.md
+            else
+              gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file alerta.md
+            fi
           else
-            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file issue-body.md
+            echo "::warning::Issues estao desabilitadas neste repositorio; o alerta ficou no resumo do job."
           fi
+
+          echo "::error::$title -- ver o resumo deste job."
+          exit 1
