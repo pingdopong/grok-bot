@@ -23,6 +23,7 @@ restructured as a Turborepo monorepo.
 | Path            | What it is                                                           |
 | --------------- | -------------------------------------------------------------------- |
 | `apps/desktop/` | The upstream reconstruction. Unchanged except where marked `[FORK]`. |
+| `docs/fork/`    | Why this fork exists, what we changed, and how to sync.              |
 
 `upstream-mirror` is a branch holding upstream's history untouched, so
 `git diff upstream-mirror..main` is the complete set of this fork's changes at any moment.
@@ -32,6 +33,14 @@ restructured as a Turborepo monorepo.
 - Node.js 26.5.x (pinned in `.node-version`)
 - pnpm 10.27.x
 - macOS on Apple Silicon — **for packaging only**
+- A local copy of the pinned Grok Bot 0.18.0 artifact, **for packaging only**
+
+> **The upstream download URL is gone.** As of 2026-08-31 the pinned DMG URL
+> returns HTTP 403 from every network tested, so `bootstrap` cannot fetch it.
+> Packaging now requires you to supply the artifact yourself — point
+> `GROK_BOT_018_APP` at an existing installed copy, or place the DMG in
+> `apps/desktop/.cache/downloads/`. This repository does not host it; see
+> [`docs/fork/UPSTREAM-WATCH.md`](docs/fork/UPSTREAM-WATCH.md).
 
 ## Build
 
