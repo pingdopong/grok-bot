@@ -266,6 +266,9 @@ importers:
       '@electron/asar':
         specifier: 4.2.1
         version: 4.2.1
+      '@pingdopong/brand':
+        specifier: workspace:*
+        version: link:../../packages/brand
       '@types/js-yaml':
         specifier: 3.12.10
         version: 3.12.10
@@ -311,6 +314,8 @@ importers:
       vite:
         specifier: 8.2.1
         version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)
+
+  packages/brand: {}
 
 packages:
 
