@@ -1,0 +1,72 @@
+name: Upstream watch
+
+# O upstream esta arquivado, entao nao ha cadencia de sync a manter
+# (GUIDE-FORK-WHITELABEL-UPSTREAM 8). O que resta e tornar a staleness visivel:
+# este job avisa se o repositorio for desarquivado ou receber commits novos.
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  watch:
+    name: Compara com o upstream
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Verifica o upstream
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          upstream=$(node -p "new URL(require('./package.json').fork.upstream).pathname.slice(1)")
+          baseline=$(node -p "require('./package.json').fork.upstreamCommit")
+
+          archived=$(gh api "repos/$upstream" --jq .archived)
+          branch=$(gh api "repos/$upstream" --jq .default_branch)
+          head=$(gh api "repos/$upstream/commits/$branch" --jq .sha)
+
+          echo "upstream : $upstream"
+          echo "arquivado: $archived"
+          echo "baseline : $baseline"
+          echo "head     : $head"
+
+          if [ "$archived" = "true" ] && [ "$head" = "$baseline" ]; then
+            echo "Sem mudanca: continua arquivado no mesmo commit."
+            exit 0
+          fi
+
+          {
+            echo "O watch agendado detectou mudanca no upstream $upstream."
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| arquivado | $archived (era true no fork) |"
+            echo "| baseline nosso | $baseline |"
+            echo "| head do upstream | $head |"
+            echo ""
+            echo "Se houver commits novos, o sync sai em PR proprio, nunca direto na main."
+            echo "Por causa do layout, o merge usa: git merge -X subtree=apps/desktop"
+            echo "Ver docs/fork/decisions/0003-mover-para-apps-desktop.md"
+          } > issue-body.md
+
+          title="Upstream mudou de estado"
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$title in:title" --json number --jq '.[0].number // empty')
+
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body-file issue-body.md
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file issue-body.md
+          fi

@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Formatacao, lint, tipos, build e testes
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          lfs: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Uma chamada so: o Turbo paraleliza respeitando o grafo. A ordem escrita
+      # segue formatacao -> lint -> tipos -> build -> testes (GUIDE-CI-GITHUB 1.1),
+      # mas quem garante fail fast e o grafo, nao a ordem da linha.
+      - name: Turbo pipeline
+        run: pnpm turbo run format:check lint typecheck source:typecheck frontend:build test publication:check
+
+      # A arvore do upstream nao e reformatada nem corrigida por nos
+      # (GUIDE-FORK-WHITELABEL-UPSTREAM 4), entao este passo e inventario, nao porteiro.
+      - name: Lint da arvore do upstream (inventario)
+        continue-on-error: true
+        run: pnpm run lint:upstream
+
+      # Modo relatorio enquanto a marca for a do upstream. Ver scripts/brand-sweep.sh.
+      - name: Varredura de marca
+        run: bash scripts/brand-sweep.sh
