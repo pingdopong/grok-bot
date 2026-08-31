@@ -19,7 +19,12 @@ try {
   await run(git, ["add", "--all"], { cwd: exported });
 
   const [sourceTree, exportedTree, sourceFiles, exportedFiles] = await Promise.all([
-    capture(git, ["rev-parse", "HEAD^{tree}"], { cwd: repoRoot }),
+    // [FORK] "HEAD:./" e a arvore do diretorio atual; "HEAD^{tree}" e sempre a
+    // arvore da RAIZ do repositorio. Num clone avulso os dois sao identicos,
+    // mas neste monorepo o repoRoot e apps/desktop: o git archive e o ls-tree
+    // acima sao relativos ao diretorio, entao comparar com a arvore da raiz
+    // falharia sempre, com as listas de arquivos batendo e os hashes nao.
+    capture(git, ["rev-parse", "HEAD:./"], { cwd: repoRoot }),
     capture(git, ["write-tree"], { cwd: exported }),
     capture(git, ["ls-tree", "-r", "--name-only", "HEAD"], { cwd: repoRoot }),
     capture(git, ["ls-files"], { cwd: exported }),
