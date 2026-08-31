@@ -1,0 +1,27 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# [FORK] O empacotamento do Electron nao sobrevive ao node_modules simbolico
+# padrao do pnpm (GUIDE-FORK-WHITELABEL-UPSTREAM 13.4). "hoisted" mantem um
+# node_modules real, que e o que scripts/package-macos.mjs, o build-asar e o
+# postinstall de patches de terceiros esperam encontrar.
+nodeLinker: hoisted
+
+# Espelha o campo "overrides" que o upstream mantinha no package.json.
+overrides:
+  node-addon-api: 8.5.0
+  "@tiptap/extension-bubble-menu": 3.14.0
+  "@tiptap/extension-floating-menu": 3.14.0
+
+# Scripts de install de dependencia sao bloqueados por padrao -- no pnpm e,
+# desde a 11, tambem no npm. Esta lista e o minimo que precisa executar:
+# electron baixa seu runtime, esbuild e os tree-sitter resolvem binarios
+# nativos, protobufjs gera seus artefatos e lefthook instala os git hooks.
+onlyBuiltDependencies:
+  - electron
+  - esbuild
+  - lefthook
+  - protobufjs
+  - tree-sitter
+  - tree-sitter-bash

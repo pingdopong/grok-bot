@@ -1,0 +1,21 @@
+{
+  "name": "@pingdopong/grok-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.27.0",
+  "engines": {
+    "node": ">=26.5.0 <27"
+  },
+  "devDependencies": {
+    "turbo": "2.10.12"
+  },
+  "fork": {
+    "upstream": "https://github.com/b-nnett/grok-bot-0.18-reconstructed",
+    "upstreamCommit": "a9f633e09d49a85829b8236331b9e21f7e612634",
+    "upstreamVersion": "0.18.0-reconstructed.1",
+    "upstreamTag": null,
+    "upstreamArchivedAt": "2026-08-23",
+    "syncedAt": "2026-08-31"
+  }
+}
