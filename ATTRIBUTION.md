@@ -5,14 +5,14 @@ or connected to Anysphere Incorporated, Cursor, xAI, or SpaceX.
 
 ## Origin
 
-| | |
-| --- | --- |
-| Upstream | `https://github.com/b-nnett/grok-bot-0.18-reconstructed` |
-| Fork baseline (upstream commit) | `a9f633e09d49a85829b8236331b9e21f7e612634` |
-| Upstream package version at baseline | `0.18.0-reconstructed.1` |
-| Upstream release tags | none published |
-| Upstream repository state | archived read-only on 2026-08-23 |
-| Forked on | 2026-08-30 |
+|                                      |                                                          |
+| ------------------------------------ | -------------------------------------------------------- |
+| Upstream                             | `https://github.com/b-nnett/grok-bot-0.18-reconstructed` |
+| Fork baseline (upstream commit)      | `a9f633e09d49a85829b8236331b9e21f7e612634`               |
+| Upstream package version at baseline | `0.18.0-reconstructed.1`                                 |
+| Upstream release tags                | none published                                           |
+| Upstream repository state            | archived read-only on 2026-08-23                         |
+| Forked on                            | 2026-08-30                                               |
 
 Upstream publishes no release tags, so the baseline is recorded as a pinned commit SHA rather than
 a tag. The `upstream-mirror` branch in this repository holds that history untouched and is never
@@ -59,4 +59,5 @@ Every edit to a file authored upstream is marked in place with a `[FORK]` commen
   relationship. The objects remain reachable through upstream's history; what changes is that our
   branch no longer distributes them. Second, `tests/research-archives.test.mjs` was rewritten,
   because the upstream version asserted that both binaries were present and checksum-matching.
+
 - **Added this file.**

@@ -1,0 +1,37 @@
+# [FORK] Hooks sao conveniencia local; o CI e a fonte da verdade
+# (GUIDE-CI-GITHUB 2.2). Qualquer um pula um hook com --no-verify.
+#
+# Desvio deliberado do lefthook.yml de joujou9/delegate, que roda typecheck e
+# testes no pre-commit: aqui sao dois projetos tsc sobre 26 MB de TypeScript
+# reconstruido, o que tornaria o pre-commit inutilizavel. Eles vao para o
+# pre-push, e o CI cobre os dois de qualquer forma.
+#
+# Nenhum job de formatacao toca apps/desktop: a arvore do upstream nao e
+# reformatada (GUIDE-FORK-WHITELABEL-UPSTREAM 4). Rodar o formatador sobre
+# arquivos que o upstream tambem edita transforma todo merge futuro em
+# conflito total.
+
+pre-commit:
+  parallel: true
+  jobs:
+    - name: oxlint
+      glob: "*.{js,jsx,ts,tsx,mjs,cjs}"
+      exclude: "apps/desktop/**"
+      run: pnpm exec oxlint --fix {staged_files}
+      stage_fixed: true
+      skip: [merge, rebase]
+    - name: oxfmt
+      glob: "*.{js,jsx,ts,tsx,mjs,cjs,json,jsonc,css,md,yml,yaml}"
+      exclude: "apps/desktop/**"
+      run: pnpm exec oxfmt {staged_files}
+      stage_fixed: true
+      skip: [merge, rebase]
+
+pre-push:
+  jobs:
+    - name: typecheck
+      run: pnpm turbo run typecheck source:typecheck
+      skip: [merge, rebase]
+    - name: test
+      run: pnpm turbo run test
+      skip: [merge, rebase]
