@@ -3,6 +3,9 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+// [FORK] node_modules pode estar hasteado para a raiz do monorepo.
+import { nodeModulesPath } from "./lib/node-modules.mjs";
+
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const targets = [
@@ -48,7 +51,7 @@ function sha256(value) {
 }
 
 for (const target of targets) {
-  const absolute = path.join(repoRoot, target.path);
+  const absolute = nodeModulesPath(target.path); // [FORK]
   const source = await readFile(absolute, "utf8");
   const before = sha256(source);
   if (before === target.patchedSha256) continue;

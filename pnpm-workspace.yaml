@@ -8,6 +8,14 @@ packages:
 # postinstall de patches de terceiros esperam encontrar.
 nodeLinker: hoisted
 
+# [FORK] Obrigatorio junto com o postinstall de patches de terceiros.
+# Por padrao o pnpm materializa node_modules com hard links para o store global
+# (verificado: link count 7 em @connectrpc/connect). O
+# scripts/apply-third-party-patches.mjs do upstream reescreve arquivos dentro de
+# node_modules -- com hard link, essa escrita corromperia o store compartilhado
+# com todos os outros projetos da maquina. "copy" custa disco e remove o risco.
+packageImportMethod: copy
+
 # Espelha o campo "overrides" que o upstream mantinha no package.json.
 overrides:
   node-addon-api: 8.5.0

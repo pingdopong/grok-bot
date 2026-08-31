@@ -3,6 +3,8 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 
 import { repoRoot } from "./lib/config.mjs";
+// [FORK] node_modules pode estar hasteado para a raiz do monorepo.
+import { nodeModulesPath } from "./lib/node-modules.mjs";
 
 const packages = ["tree-sitter", "tree-sitter-bash"];
 const dependencies = ["node-addon-api", "node-gyp-build"];
@@ -12,9 +14,10 @@ function nodeRuntimeCacheRoot() {
 }
 
 function runNodeGyp(target) {
+  // [FORK] node_modules pode estar hasteado para a raiz do monorepo.
   const command = process.platform === "win32"
-    ? path.join(repoRoot, "node_modules", ".bin", "node-gyp.cmd")
-    : path.join(repoRoot, "node_modules", ".bin", "node-gyp");
+    ? nodeModulesPath(".bin", "node-gyp.cmd")
+    : nodeModulesPath(".bin", "node-gyp");
   const environment = { ...process.env };
   for (const key of ["npm_config_runtime", "npm_config_target", "npm_config_disturl", "npm_config_nodedir"]) delete environment[key];
   environment.npm_config_build_from_source = "true";
@@ -50,7 +53,7 @@ export async function ensureNodeTreeSitterRuntime() {
     await mkdir(packageRoot, { recursive: true });
     for (const packageName of [...packages, ...dependencies]) {
       await cp(
-        path.join(repoRoot, "node_modules", packageName),
+        nodeModulesPath(packageName), // [FORK]
         path.join(packageRoot, packageName),
         { recursive: true, dereference: true },
       );
