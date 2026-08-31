@@ -1,13 +1,6 @@
-*.cjs text eol=lf
-*.js text eol=lf
-*.mjs text eol=lf
-*.json text eol=lf
-*.html text eol=lf
-*.css text eol=lf
-*.map text eol=lf
-*.node binary
-*.wasm binary
-*.icns binary
-src/app/dist/native/* binary
-research-archives/original/**/*.dmg filter=lfs diff=lfs merge=lfs -text
-research-archives/original/**/*.exe filter=lfs diff=lfs merge=lfs -text
+# [FORK] Normaliza finais de linha no monorepo inteiro. Sem isto, um checkout no
+# Windows converte para CRLF os arquivos que o .gitattributes do upstream nao
+# cobre (.ts, .tsx, .md, .yml), e o formatador passa a divergir entre a maquina
+# local e o CI. O .gitattributes de apps/desktop continua valendo para os
+# padroes que ele proprio declara.
+* text=auto eol=lf

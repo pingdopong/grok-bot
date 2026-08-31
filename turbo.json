@@ -1,0 +1,16 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "tasks": {
+    "typecheck": {},
+    "source:typecheck": {},
+    "frontend:build": {
+      "outputs": [".build/frontend-shell/**"]
+    },
+    "test": {
+      "cache": false
+    },
+    "publication:check": {
+      "cache": false
+    }
+  }
+}

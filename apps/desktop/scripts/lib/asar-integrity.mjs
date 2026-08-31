@@ -5,6 +5,8 @@ import path from "node:path";
 import { listPackage, statFile } from "@electron/asar";
 
 import { repoRoot } from "./config.mjs";
+// [FORK] node_modules pode estar hasteado para a raiz do monorepo.
+import { nodeModulesPath } from "./node-modules.mjs";
 import { run } from "./process.mjs";
 
 const unpackedPrefixes = ["dist/deps/", "dist/native/", "dist/node-deps/"];
@@ -92,7 +94,7 @@ export async function packStagedAppWithIntegrity({
   stageRoot,
   archivePath,
   unpackedRoot,
-  asarCli = path.join(repoRoot, "node_modules", "@electron", "asar", "bin", "asar.mjs"),
+  asarCli = nodeModulesPath("@electron", "asar", "bin", "asar.mjs"), // [FORK]
 } = {}) {
   if (stageRoot == null || archivePath == null || unpackedRoot == null) {
     throw new TypeError("packStagedAppWithIntegrity requires explicit stageRoot, archivePath, and unpackedRoot outputs");

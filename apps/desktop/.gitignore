@@ -1,0 +1,38 @@
+node_modules/
+/.cache/
+/.build/
+/dist/
+/src/app/dist/
+/recovered/
+/recovery/
+/reports/
+/work/
+.DS_Store
+*.log
+
+# Machine-local harness and inspection scratch.
+/.tmp*/
+/.grok-*/
+/.playwright-cli/
+/.tmp-*.mjs
+/frontend/.tmp-*/
+/.http-probe.*/
+/.mcp-bridge.*/
+/.openrouter-probe.*/
+/.router-*/
+
+# One-off extracted bundle copies at the repository root. Canonical payloads
+# live under src/app/dist and recovered/frontend.
+/host-main.cjs
+/main.cjs
+/index-*.js
+/katex-*.js
+/mermaid.core-*.js
+/xlsx-*.js
+/index.html
+
+# [FORK] Este fork nao redistribui os instaladores originais da Anysphere.
+# Uma copia local segue suportada pelo bootstrap; ela so nao pode ser versionada.
+# Ver ATTRIBUTION.md e docs/fork/decisions/0005-remocao-dos-instaladores-lfs.md.
+/research-archives/original/**/*.dmg
+/research-archives/original/**/*.exe

@@ -3,6 +3,9 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
+// [FORK] node_modules pode estar hasteado para a raiz do monorepo.
+import { nodeModulesPath } from "./lib/node-modules.mjs";
+
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const electronVersion = "42.1.0";
 const electronAbi = "146";
@@ -47,12 +50,13 @@ const env = {
   npm_config_target: electronVersion,
   npm_config_disturl: "https://artifacts.electronjs.org/headers/dist",
 };
+// [FORK] node_modules pode estar hasteado para a raiz do monorepo.
 const gyp = process.platform === "win32"
-  ? path.join(repoRoot, "node_modules/.bin/node-gyp.cmd")
-  : path.join(repoRoot, "node_modules/.bin/node-gyp");
+  ? nodeModulesPath(".bin/node-gyp.cmd")
+  : nodeModulesPath(".bin/node-gyp");
 
 for (const packageName of packages) {
-  const packageRoot = path.join(repoRoot, "node_modules", packageName);
+  const packageRoot = nodeModulesPath(packageName); // [FORK]
   await run(gyp, ["rebuild", "--directory", packageRoot, "--release", "--nodedir", headersDir, "--jobs", "max"], env);
 }
 
