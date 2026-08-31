@@ -40,7 +40,7 @@ restructured as a Turborepo monorepo.
 > Packaging now requires you to supply the artifact yourself — point
 > `GROK_BOT_018_APP` at an existing installed copy, or place the DMG in
 > `apps/desktop/.cache/downloads/`. This repository does not host it; see
-> [`docs/fork/UPSTREAM-WATCH.md`](docs/fork/UPSTREAM-WATCH.md).
+> [`docs/fork/PACKAGING.md`](docs/fork/PACKAGING.md).
 
 ## Build
 

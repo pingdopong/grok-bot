@@ -78,9 +78,10 @@ sintetica no cache poderia ser reaplicada por engano num merge real.
 
 ## Arquivos
 
-| Arquivo             | Para que serve                                                 |
-| ------------------- | -------------------------------------------------------------- |
-| `CUSTOMIZATIONS.md` | inventario de toda edicao em arquivo do upstream, com o motivo |
-| `SYNC-LOG.md`       | uma entrada por sync                                           |
-| `UPSTREAM-WATCH.md` | o que observar no upstream                                     |
-| `decisions/`        | ADRs das escolhas de nivel de fork                             |
+| Arquivo             | Para que serve                                                  |
+| ------------------- | --------------------------------------------------------------- |
+| `PACKAGING.md`      | como empacotar, e por que trazer o artefato virou pre-requisito |
+| `CUSTOMIZATIONS.md` | inventario de toda edicao em arquivo do upstream, com o motivo  |
+| `SYNC-LOG.md`       | uma entrada por sync                                            |
+| `UPSTREAM-WATCH.md` | o que observar no upstream                                      |
+| `decisions/`        | ADRs das escolhas de nivel de fork                              |
