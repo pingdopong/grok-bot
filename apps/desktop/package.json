@@ -1,5 +1,5 @@
 {
-  "name": "grok-bot-0.18-reconstructed",
+  "name": "@pingdopong/desktop",
   "version": "0.18.0-reconstructed.1",
   "private": true,
   "type": "module",
@@ -26,6 +26,7 @@
     "verify": "node scripts/verify.mjs"
   },
   "devDependencies": {
+    "@pingdopong/brand": "workspace:*",
     "@electron/asar": "4.2.1",
     "@types/js-yaml": "3.12.10",
     "@types/node": "26.2.0",

@@ -1,6 +1,12 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+// [FORK] Identidade do produto vem do manifesto de marca do fork, nao de
+// literais espalhados. Ver packages/brand/brand.config.mjs. Os valores sao os
+// mesmos do upstream, exceto os dois bundle identifiers, que sairam do
+// namespace com.anysphere.* -- ele nao e nosso.
+import { brand } from "@pingdopong/brand";
+
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
 
 export const repoRoot = path.resolve(thisDir, "../..");
@@ -24,25 +30,25 @@ export const outputDir = path.join(repoRoot, "dist");
 const configuredOutputName = process.env.GROK_BOT_OUTPUT_APP_NAME?.trim();
 export const outputApp = path.join(
   outputDir,
-  configuredOutputName ? path.basename(configuredOutputName) : "Grok Bot 0.18 Reconstructed.app"
+  configuredOutputName ? path.basename(configuredOutputName) : `${brand.productName}.app`
 );
-export const fidelityOutputApp = path.join(outputDir, "Grok Bot 0.18 Fidelity.app");
+export const fidelityOutputApp = path.join(outputDir, `${brand.fidelityProductName}.app`);
 export const fidelityOutputAppForAsarHash = asarHash => {
   if (!/^[0-9a-f]{64}$/.test(asarHash)) throw new TypeError("A full lowercase ASAR SHA-256 is required");
-  return path.join(outputDir, `Grok Bot 0.18 Fidelity-${asarHash.slice(0, 12)}.app`);
+  return path.join(outputDir, `${brand.fidelityProductName}-${asarHash.slice(0, 12)}.app`);
 };
 export const fidelityInstalledAppForAsarHash = asarHash => path.join("/Applications", path.basename(fidelityOutputAppForAsarHash(asarHash)));
 export const recoveredFrontendDir = path.join(repoRoot, "recovered", "frontend");
 export const recoveredRendererDir = path.join(recoveredFrontendDir, "app");
 export const frontendDir = path.join(repoRoot, "frontend");
-export const devOutputApp = path.join(outputDir, "Grok Bot 0.18 Dev.app");
+export const devOutputApp = path.join(outputDir, `${brand.devProductName}.app`);
 export const devProfileDir = path.join(cacheDir, "dev-profile");
 
 export const upstreamVersion = "0.18.0";
-export const reconstructedBundleId = "com.anysphere.sand.reconstructed";
-export const reconstructedName = "Grok Bot 0.18 Reconstructed";
-export const fidelityBundleId = "com.anysphere.sand.reconstructed.fidelity";
-export const fidelityName = "Grok Bot 0.18 Fidelity";
+export const reconstructedBundleId = brand.bundleId;
+export const reconstructedName = brand.productName;
+export const fidelityBundleId = brand.fidelityBundleId;
+export const fidelityName = brand.fidelityProductName;
 export const dmgUrl = "https://downloads.cursor.com/grokbot/stable/darwin-arm64/0.18.0/Grok_Bot_0.18.0.dmg";
 export const dmgSha256 = "a253ccd8aab01e083f9812a0264354c5034d8ba7f0610bbb557e82ae77d203eb";
 export const upstreamAsarSha256 = "6665408168466f9cacc6087e917890c17f59d2e2e9c2404a5c4a59ad79c1de58";
