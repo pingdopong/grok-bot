@@ -20,8 +20,8 @@ restructured as a Turborepo monorepo.
 
 ## Layout
 
-| Path | What it is |
-| --- | --- |
+| Path            | What it is                                                           |
+| --------------- | -------------------------------------------------------------------- |
 | `apps/desktop/` | The upstream reconstruction. Unchanged except where marked `[FORK]`. |
 
 `upstream-mirror` is a branch holding upstream's history untouched, so

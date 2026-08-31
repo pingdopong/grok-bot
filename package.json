@@ -3,13 +3,23 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@10.27.0",
+  "scripts": {
+    "lint": "oxlint packages",
+    "lint:upstream": "oxlint apps/desktop",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "prepare": "lefthook install"
+  },
+  "devDependencies": {
+    "lefthook": "2.1.12",
+    "oxfmt": "0.65.0",
+    "oxlint": "1.80.0",
+    "turbo": "2.10.12"
+  },
   "engines": {
     "node": ">=26.5.0 <27"
   },
-  "devDependencies": {
-    "turbo": "2.10.12"
-  },
+  "packageManager": "pnpm@10.27.0",
   "fork": {
     "upstream": "https://github.com/b-nnett/grok-bot-0.18-reconstructed",
     "upstreamCommit": "a9f633e09d49a85829b8236331b9e21f7e612634",
