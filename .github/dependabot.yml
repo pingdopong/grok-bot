@@ -1,0 +1,24 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # Escopo deliberadamente restrito a raiz. As dependencias de apps/desktop sao
+  # fixadas pela reconstrucao e verificadas pelos scripts de production
+  # activation: atualiza-las nao e manutencao de rotina, e mudanca de contrato.
+  - package-ecosystem: npm
+    directories:
+      - "/"
+      - "/packages/*"
+    schedule:
+      interval: weekly
+    groups:
+      tooling:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]

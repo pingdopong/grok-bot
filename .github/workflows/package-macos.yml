@@ -1,0 +1,74 @@
+name: Package (macOS)
+
+# Dispatch manual apenas, e sem publish. Este job baixa o DMG oficial da
+# Anysphere e monta um artefato derivado; nao existe release, feed de update nem
+# assinatura. Enquanto nao houver decisao juridica sobre distribuicao, o
+# resultado fica retido como artefato do Actions.
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Motivo deste empacotamento"
+        required: true
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Empacota e verifica (macOS arm64)
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          lfs: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache do runtime Electron
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/electron
+          key: electron-${{ runner.os }}-42.1.0
+
+      # Chave derivada do SHA-256 fixado do DMG: se o pin mudar, o cache cai sozinho.
+      - name: Cache do DMG fixado
+        uses: actions/cache@v4
+        with:
+          path: apps/desktop/.cache/downloads
+          key: grokbot-dmg-a253ccd8aab01e083f9812a0264354c5034d8ba7f0610bbb557e82ae77d203eb
+
+      - name: Bootstrap
+        run: pnpm --filter @pingdopong/desktop run bootstrap
+
+      - name: Package
+        run: pnpm --filter @pingdopong/desktop run package
+
+      - name: Verify
+        run: pnpm --filter @pingdopong/desktop run verify
+
+      - name: Publica o artefato no Actions (nao e release)
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: desktop-macos-arm64
+          path: apps/desktop/dist/
+          retention-days: 7
