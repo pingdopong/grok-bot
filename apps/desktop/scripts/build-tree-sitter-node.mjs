@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 import { repoRoot } from "./lib/config.mjs";
 // [FORK] node_modules pode estar hasteado para a raiz do monorepo.
 import { nodeModulesPath } from "./lib/node-modules.mjs";
+import { nodeGypInvocation } from "./lib/node-gyp.mjs"; // [FORK]
 
 const packages = ["tree-sitter", "tree-sitter-bash"];
 const dependencies = ["node-addon-api", "node-gyp-build"];
@@ -14,15 +15,14 @@ function nodeRuntimeCacheRoot() {
 }
 
 function runNodeGyp(target) {
-  // [FORK] node_modules pode estar hasteado para a raiz do monorepo.
-  const command = process.platform === "win32"
-    ? nodeModulesPath(".bin", "node-gyp.cmd")
-    : nodeModulesPath(".bin", "node-gyp");
+  // [FORK] Invoca o entrypoint JS do node-gyp em vez do shim de plataforma:
+  // spawn de .cmd falha com EINVAL no Windows. Ver scripts/lib/node-gyp.mjs.
+  const { command, args: gypArgs } = nodeGypInvocation(["rebuild", "--directory", target, "--release"]);
   const environment = { ...process.env };
   for (const key of ["npm_config_runtime", "npm_config_target", "npm_config_disturl", "npm_config_nodedir"]) delete environment[key];
   environment.npm_config_build_from_source = "true";
   return new Promise((resolve, reject) => {
-    const child = spawn(command, ["rebuild", "--directory", target, "--release"], {
+    const child = spawn(command, gypArgs, {
       cwd: repoRoot,
       env: environment,
       stdio: ["ignore", "inherit", "inherit"],

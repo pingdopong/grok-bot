@@ -11,6 +11,7 @@ import {
 } from "./config.mjs";
 import { packStagedAppWithIntegrity } from "./asar-integrity.mjs";
 import { resolveRuntimeApp } from "./runtime.mjs";
+import { resolveRuntimeUnpackedDist } from "./runtime-unpacked.mjs"; // [FORK]
 
 export const reconstructedUpdaterGuard = [
   "// Reconstructed-build guard: do not consume official update or telemetry services.",
@@ -137,9 +138,9 @@ export async function buildAsar({
   archivePath = builtAsar,
   unpackedRoot = builtAsarUnpacked,
 } = {}) {
-  const runtimeApp = await resolveRuntimeApp();
-  const resources = path.join(runtimeApp, "Contents", "Resources");
-  const runtimeUnpacked = path.join(resources, "app.asar.unpacked", "dist");
+  // [FORK] O runtime nao e um bundle .app no Windows: os mesmos diretorios
+  // unpacked vem do payload do instalador NSIS. Ver scripts/lib/runtime-unpacked.mjs.
+  const { runtimeRoot: runtimeApp, unpackedDist: runtimeUnpacked } = await resolveRuntimeUnpackedDist();
 
   await rm(buildRoot, { recursive: true, force: true });
   await mkdir(buildRoot, { recursive: true });

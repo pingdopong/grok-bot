@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 // [FORK] node_modules pode estar hasteado para a raiz do monorepo.
 import { nodeModulesPath } from "./lib/node-modules.mjs";
+import { nodeGypInvocation } from "./lib/node-gyp.mjs"; // [FORK]
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const electronVersion = "42.1.0";
@@ -50,14 +51,13 @@ const env = {
   npm_config_target: electronVersion,
   npm_config_disturl: "https://artifacts.electronjs.org/headers/dist",
 };
-// [FORK] node_modules pode estar hasteado para a raiz do monorepo.
-const gyp = process.platform === "win32"
-  ? nodeModulesPath(".bin/node-gyp.cmd")
-  : nodeModulesPath(".bin/node-gyp");
+
 
 for (const packageName of packages) {
   const packageRoot = nodeModulesPath(packageName); // [FORK]
-  await run(gyp, ["rebuild", "--directory", packageRoot, "--release", "--nodedir", headersDir, "--jobs", "max"], env);
+  // [FORK] Entrypoint JS do node-gyp; spawn de .cmd falha no Windows.
+  const { command, args } = nodeGypInvocation(["rebuild", "--directory", packageRoot, "--release", "--nodedir", headersDir, "--jobs", "max"]);
+  await run(command, args, env);
 }
 
 console.log(JSON.stringify({
