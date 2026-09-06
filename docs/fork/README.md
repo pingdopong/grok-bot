@@ -80,6 +80,7 @@ sintetica no cache poderia ser reaplicada por engano num merge real.
 
 | Arquivo             | Para que serve                                                  |
 | ------------------- | --------------------------------------------------------------- |
+| `WINDOWS.md`        | ate onde chega a tentativa de rodar no Windows, e onde para     |
 | `PACKAGING.md`      | como empacotar, e por que trazer o artefato virou pre-requisito |
 | `CUSTOMIZATIONS.md` | inventario de toda edicao em arquivo do upstream, com o motivo  |
 | `SYNC-LOG.md`       | uma entrada por sync                                            |
