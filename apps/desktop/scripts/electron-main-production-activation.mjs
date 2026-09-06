@@ -8,6 +8,7 @@ import { build as esbuild } from "esbuild";
 import { applyReconstructedUpdaterGuard } from "./lib/build-asar.mjs";
 
 import { repoRoot, sourceAppDir } from "./lib/config.mjs";
+import { nodeModulesPath } from "./lib/node-modules.mjs"; // [FORK]
 
 export const electronMainBindingProvenancePath = "dist/electron-main-production-bindings.json";
 export const electronMainNodeTarget = "node22";
@@ -115,7 +116,9 @@ async function materializeElectronMainRuntimePackages(outputRoot) {
   for (const spec of electronMainExternalRuntimePackageSpecs) {
     const lockRecord = lockfile.packages?.[spec.lockPath];
     if (lockRecord?.version !== spec.version || lockRecord?.integrity !== spec.integrity) throw new Error(`Clean Electron main runtime package drifted: ${spec.name}@${spec.version}.`);
-    const source = path.join(repoRoot, spec.lockPath);
+    // [FORK] As dependencias ficam hasteadas na raiz do monorepo, nao em
+    // apps/desktop/node_modules. Ver docs/fork/decisions/0007-pnpm-com-node-linker-hoisted.md.
+    const source = nodeModulesPath(spec.lockPath);
     const metadata = JSON.parse(await readFile(path.join(source, "package.json"), "utf8"));
     if (metadata.version !== spec.version) throw new Error(`Installed Electron runtime package drifted: ${spec.name}@${spec.version}.`);
     if (spec.name === "undici" && (metadata.main !== "index.js" || metadata.types !== "index.d.ts" || metadata.engines?.node !== ">=14.0" || metadata.exports !== undefined)) {
