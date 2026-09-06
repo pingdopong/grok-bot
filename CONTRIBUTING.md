@@ -63,6 +63,12 @@ pnpm turbo run format:check lint typecheck source:typecheck frontend:build test
 Linux and macOS, not in Git Bash on Windows. Packaging (`bootstrap`, `package`,
 `verify`) is macOS/arm64 only and runs through the manual-dispatch workflow.
 
+If you are not on macOS, that boundary is harder than it looks: you can edit,
+typecheck, test and build the reconstructed TypeScript, but you cannot **run**
+the application, and the Vite dev server for `frontend/` will not start either —
+it reads renderer output that only `bootstrap` produces. See "What runs where"
+in the [README](README.md) before assuming a failure is a bug.
+
 Do not weaken checksum, bundle-identity, code-signing, or clean-export checks to
 make a build pass. That rule is upstream's and it still holds here.
 
