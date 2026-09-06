@@ -123,3 +123,72 @@ Arquivos novos (tier 2, sem conflito com o upstream): `bootstrap-windows.mjs`,
 - **A superfície de diff cresceu.** Três edições e quatro arquivos novos, contra
   a disciplina que o resto do dossiê defende. Se o Windows não for seguir, vale
   reverter em vez de manter código não exercitado.
+
+## Resultado da execução (2026-09-06)
+
+**Subiu e quebrou em runtime — antes de qualquer janela.** Nem sucesso nem o
+bloqueio de build antigo: o processo Electron chegou a inicializar, mas a
+composição de bindings de produção do main process aborta antes de criar a
+`BrowserWindow`.
+
+O build (`apps/desktop/.build/fidelity/app`) já estava montado, com
+`dist/deps` staged (`tree-sitter`, `tree-sitter-bash`, `better-sqlite3`,
+`whichlang-node-win32-x64-msvc`, etc.) — a hipótese de "suspeito nº 1:
+`dist/deps` não estagiado" **não se confirmou**, o diretório está completo.
+
+Rodado com `cd apps/desktop && node scripts/run-windows.mjs`. Saída completa:
+
+```
+Electron: C:\dev\grok-bot.worktrees\win-impl\node_modules\electron\dist\electron.exe
+App:      C:\dev\grok-bot.worktrees\win-impl\apps\desktop\.build\fidelity\app
+
+[sand-electron-main] fatal composition failure: Error: Electron production binding requires electron.app.isInApplicationsFolder()..
+```
+
+Nenhuma janela abriu — confirmado via `Get-Process -Id <pid_do_electron> |
+Select MainWindowHandle`, que voltou `0`. O processo principal do Electron
+ficou vivo em segundo plano (junto com os processos auxiliares `--type=gpu-process`
+e `--type=utility` que ele mesmo lança), sem UI nenhuma, até ser encerrado
+manualmente (`Stop-Process`) — não foi deixado rodando.
+
+**Causa raiz identificada, não é o suspeito nº 1 do plano.** Não é
+`packages/shell-exec/sandbox/macos` (esse caminho nem chega a ser exercitado
+antes da falha). É `source/electron-main/production-binding-providers.ts`,
+função `createProductionStartupBinding` (por volta da linha 464-475):
+
+```ts
+for (const [value, label] of [
+  [ports?.app?.setPath, "electron.app.setPath()."],
+  [ports?.app?.getPath, "electron.app.getPath()."],
+  [ports?.app?.isInApplicationsFolder, "electron.app.isInApplicationsFolder()."],
+  [ports?.app?.moveToApplicationsFolder, "electron.app.moveToApplicationsFolder()."],
+  [ports?.app?.relaunch, "electron.app.relaunch()."],
+  [ports?.app?.exit, "electron.app.exit()."],
+  [ports?.dialog?.showMessageBox, "electron.dialog.showMessageBox()."],
+] as const)
+  requireFunction(value, label);
+```
+
+Essa validação roda incondicionalmente, sem checar `process.platform`.
+`electron.app.isInApplicationsFolder` e `electron.app.moveToApplicationsFolder`
+são APIs **exclusivas do macOS** — no Electron para Windows a propriedade nem
+existe no objeto `app`, então `typeof value !== "function"` é verdadeiro e
+`requireFunction` lança. O uso real dessas APIs (em
+`source/electron-main/startup/move-to-applications-folder.ts`) já é
+corretamente condicionado a `options.platform !== "darwin"` — o bug está só na
+validação prévia de bindings, que exige a função existir mesmo em uma
+plataforma onde ela nunca vai ser chamada.
+
+Ou seja: o `SAND_PACKAGED=1` fez exatamente o que deveria (o app achou o
+runner do Electron e tentou montar os bindings de produção); o bloqueio é uma
+checagem de composição que faltou tornar platform-aware, não um problema de
+empacotamento nem do sandbox do macOS.
+
+**O que não foi testado:** renderização da UI, autenticação, qualquer
+funcionalidade além do arranque do main process. Como o processo nunca chega a
+criar janela, nada do renderer chegou a rodar.
+
+**Próximo passo óbvio** (fora do escopo desta tarefa): tornar
+`createProductionStartupBinding` platform-aware — pular a exigência de
+`isInApplicationsFolder`/`moveToApplicationsFolder` fora do `darwin`, do mesmo
+jeito que `moveToApplicationsFolderIfNeeded` já faz.
