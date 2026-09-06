@@ -52,3 +52,42 @@ jobs:
       # Modo relatorio enquanto a marca for a do upstream. Ver scripts/brand-sweep.sh.
       - name: Varredura de marca
         run: bash scripts/brand-sweep.sh
+
+  windows-smoke:
+    name: Smoke do bootstrap Windows
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Sem o instalador da Anysphere nao da para bootstrapar, e este
+      # repositorio nao o hospeda. O que o CI pode provar sem o artefato e que
+      # os scripts carregam, tipam e falham com a mensagem certa.
+      - name: Contratos e tipos
+        run: pnpm turbo run typecheck source:typecheck test
+
+      - name: O bootstrap falha com mensagem util quando nao ha artefato
+        shell: bash
+        run: |
+          cd apps/desktop
+          if node scripts/bootstrap-windows.mjs 2>err.txt; then
+            echo "::error::bootstrap deveria falhar sem o instalador"
+            exit 1
+          fi
+          grep -q "Instalador 0.18.0 nao encontrado" err.txt
+          grep -q "docs/fork/PACKAGING.md" err.txt
