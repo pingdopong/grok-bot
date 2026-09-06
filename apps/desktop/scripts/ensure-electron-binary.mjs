@@ -10,6 +10,7 @@ import { pathToFileURL } from "node:url";
 
 import { nodeModulesPath } from "./lib/node-modules.mjs";
 import { run } from "./lib/process.mjs";
+import { windowsTar } from "./lib/windows-config.mjs";
 
 // [FORK] Resolve a partir do package.json, que sempre existe: resolver
 // diretamente "electron/dist" falharia na primeira execucao, quando o dist
@@ -58,12 +59,11 @@ function electronCacheRoot() {
 // tempo -- e pegar "o primeiro que aparecer" instala silenciosamente a versao
 // errada. O nome do arquivo (electron-v<versao>-<plataforma>-<arch>.zip) e a
 // unica pista disponivel sem abrir o zip, entao filtramos por ele.
-function cachedZipName(version) {
+export function cachedZipName(version) {
   return `electron-v${version}-${process.platform}-${process.arch}.zip`;
 }
 
-async function cachedZip(version) {
-  const cacheRoot = electronCacheRoot();
+export async function cachedZip(version, cacheRoot = electronCacheRoot()) {
   if (!(await exists(cacheRoot))) return null;
   const wanted = cachedZipName(version);
   for (const entry of await readdir(cacheRoot, { withFileTypes: true })) {
@@ -105,7 +105,7 @@ export async function ensureElectronBinary() {
       `Electron ${version} nao esta em cache (${cachedZipName(version)}). Rode \`node node_modules/electron/install.js\`.`,
     );
   }
-  const tar = process.platform === "win32" ? "C:\\Windows\\System32\\tar.exe" : "tar";
+  const tar = process.platform === "win32" ? windowsTar : "tar";
   await rm(electronDist, { recursive: true, force: true });
   await mkdir(electronDist, { recursive: true });
   await run(tar, ["-xf", zip, "-C", electronDist]);
