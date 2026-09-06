@@ -89,21 +89,25 @@ deste fork por definicao.
 
 Nao conflitam com o upstream: ele nao conhece esses caminhos.
 
-| Caminho                                                   | Para que serve                                          |
-| --------------------------------------------------------- | ------------------------------------------------------- |
-| `ATTRIBUTION.md`                                          | origem, baseline, nao-afiliacao                         |
-| `README.md` (raiz)                                        | face publica do fork                                    |
-| `SECURITY.md`, `CONTRIBUTING.md` (raiz)                   | politica deste fork                                     |
-| `packages/brand/`                                         | manifesto de marca                                      |
-| `scripts/brand-sweep.sh`                                  | varredura de marca, em modo relatorio                   |
-| `apps/desktop/scripts/lib/node-modules.mjs`               | resolvedor de `node_modules`                            |
-| `apps/desktop/scripts/ensure-electron-binary.mjs`         | provisiona o binario do Electron, validando o resultado |
-| `apps/desktop/scripts/run-windows.mjs`                    | executa o app reconstruido no Windows sem empacotar     |
-| `apps/desktop/tests/fork-*.test.mjs`                      | testes de customizacao do fork                          |
-| `turbo.json`, `pnpm-workspace.yaml`, `tsconfig.base.json` | monorepo                                                |
-| `.oxlintrc.json`, `.oxfmtrc.json`, `lefthook.yml`         | qualidade                                               |
-| `.github/workflows/*`, `.github/dependabot.yml`           | CI                                                      |
-| `docs/fork/`                                              | este dossie                                             |
+| Caminho                                                   | Para que serve                                                        |
+| --------------------------------------------------------- | --------------------------------------------------------------------- |
+| `ATTRIBUTION.md`                                          | origem, baseline, nao-afiliacao                                       |
+| `README.md` (raiz)                                        | face publica do fork                                                  |
+| `SECURITY.md`, `CONTRIBUTING.md` (raiz)                   | politica deste fork                                                   |
+| `packages/brand/`                                         | manifesto de marca                                                    |
+| `scripts/brand-sweep.sh`                                  | varredura de marca, em modo relatorio                                 |
+| `apps/desktop/scripts/lib/node-modules.mjs`               | resolvedor de `node_modules`                                          |
+| `apps/desktop/scripts/lib/windows-config.mjs`             | identidades e caminhos do build Windows                               |
+| `apps/desktop/scripts/lib/node-gyp.mjs`                   | invoca o entrypoint JS do node-gyp (spawn de `.cmd` falha no Windows) |
+| `apps/desktop/scripts/lib/runtime-unpacked.mjs`           | resolve o `dist/` unpacked por plataforma                             |
+| `apps/desktop/scripts/ensure-electron-binary.mjs`         | provisiona o binario do Electron, validando o resultado               |
+| `apps/desktop/scripts/run-windows.mjs`                    | executa o app reconstruido no Windows sem empacotar                   |
+| `apps/desktop/scripts/bootstrap-windows.mjs`              | bootstrap Windows a partir do instalador NSIS                         |
+| `apps/desktop/tests/fork-*.test.mjs`                      | testes de customizacao do fork                                        |
+| `turbo.json`, `pnpm-workspace.yaml`, `tsconfig.base.json` | monorepo                                                              |
+| `.oxlintrc.json`, `.oxfmtrc.json`, `lefthook.yml`         | qualidade                                                             |
+| `.github/workflows/*`, `.github/dependabot.yml`           | CI                                                                    |
+| `docs/fork/`                                              | este dossie                                                           |
 
 ## Acoplamentos que este fork criou
 
