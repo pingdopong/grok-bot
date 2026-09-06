@@ -1,0 +1,86 @@
+// [FORK] Arquivo novo deste fork.
+//
+// O install.js do Electron sai com codigo 0 mesmo quando o extract-zip aborta no
+// meio da extracao -- observado nesta base: restaram apenas locales/, sem o
+// executavel. Este provisionador valida o RESULTADO em vez do codigo de saida, e
+// cai para o bsdtar que ja vem no Windows quando a extracao ficou incompleta.
+import { access, mkdir, readdir, rm } from "node:fs/promises";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
+import { nodeModulesPath } from "./lib/node-modules.mjs";
+import { run } from "./lib/process.mjs";
+
+const electronDist = nodeModulesPath("electron", "dist");
+
+export function electronExecutable() {
+  if (process.platform === "win32") return path.join(electronDist, "electron.exe");
+  if (process.platform === "darwin") {
+    return path.join(electronDist, "Electron.app", "Contents", "MacOS", "Electron");
+  }
+  return path.join(electronDist, "electron");
+}
+
+async function exists(target) {
+  try {
+    await access(target);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// So Windows e macOS interessam: sao as duas plataformas que este fork suporta.
+function electronCacheRoot() {
+  if (process.platform === "win32") {
+    return path.join(process.env.LOCALAPPDATA ?? "", "electron", "Cache");
+  }
+  return path.join(process.env.HOME ?? "", "Library", "Caches", "electron");
+}
+
+async function cachedZip() {
+  const cacheRoot = electronCacheRoot();
+  if (!(await exists(cacheRoot))) return null;
+  for (const entry of await readdir(cacheRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    for (const file of await readdir(path.join(cacheRoot, entry.name))) {
+      if (file.endsWith(".zip")) return path.join(cacheRoot, entry.name, file);
+    }
+  }
+  return null;
+}
+
+export async function ensureElectronBinary() {
+  const executable = electronExecutable();
+  if (await exists(executable)) return executable;
+
+  await run(process.execPath, [nodeModulesPath("electron", "install.js")]);
+  if (await exists(executable)) return executable;
+
+  // Extracao incompleta: refaz a partir do zip ja baixado e validado por
+  // checksum pelo proprio install.js.
+  const zip = await cachedZip();
+  if (zip == null) {
+    throw new Error(
+      "Electron nao instalado e nenhum zip em cache. Rode `node node_modules/electron/install.js`.",
+    );
+  }
+  const tar = process.platform === "win32" ? "C:\\Windows\\System32\\tar.exe" : "tar";
+  await rm(electronDist, { recursive: true, force: true });
+  await mkdir(electronDist, { recursive: true });
+  await run(tar, ["-xf", zip, "-C", electronDist]);
+
+  if (!(await exists(executable))) {
+    throw new Error(`Extracao do Electron falhou: ${executable} continua ausente.`);
+  }
+  return executable;
+}
+
+// [FORK] `file://${process.argv[1]}` so bate em POSIX -- no Windows argv[1]
+// vem com barras invertidas e letra de unidade, entao a comparacao textual
+// nunca e verdadeira e este bloco nunca roda. pathToFileURL normaliza os dois
+// lados antes de comparar; mesmo idioma ja usado em audit-renderer-closure.mjs
+// e audit-ui-provenance.mjs neste fork.
+if (process.argv[1] != null && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
+  console.log(await ensureElectronBinary());
+}
