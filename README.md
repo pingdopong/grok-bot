@@ -52,26 +52,33 @@ To **run or package** the application, additionally:
 The application is a macOS arm64 `.app`, and its renderer comes out of the pinned DMG. That makes
 the platform boundary sharper than "packaging is macOS-only" suggests:
 
-| Task                                   | Windows / Linux                     | macOS arm64            |
-| -------------------------------------- | ----------------------------------- | ---------------------- |
-| `pnpm install`, `lint`, `format:check` | yes                                 | yes                    |
-| `typecheck`, `source:typecheck`        | yes                                 | yes                    |
-| `test`                                 | yes                                 | yes                    |
-| `frontend:build`                       | yes                                 | yes                    |
-| `publication:check`                    | no — needs `/usr/bin/git` and `tar` | yes                    |
-| Vite dev server for `frontend/`        | **no**                              | yes, after `bootstrap` |
-| `bootstrap`, `package`, `verify`       | **no**                              | yes                    |
+| Task                                   | Windows                                     | macOS arm64            |
+| -------------------------------------- | ------------------------------------------- | ---------------------- |
+| `pnpm install`, `lint`, `format:check` | yes                                         | yes                    |
+| `typecheck`, `source:typecheck`        | yes                                         | yes                    |
+| `test`                                 | yes                                         | yes                    |
+| `frontend:build`                       | yes                                         | yes                    |
+| `publication:check`                    | no — needs `/usr/bin/git` and `tar`         | yes                    |
+| Vite dev server for `frontend/`        | **no**                                      | yes, after `bootstrap` |
+| `bootstrap-windows` + `build`          | **yes**                                     | not applicable         |
+| `run:windows`                          | **partial** — starts, UI doesn't render yet | not applicable         |
+| `bootstrap`, `package`, `verify`       | no                                          | yes                    |
 
 Two things are easy to miss:
 
 - `apps/desktop/scripts/lib/system-tools.mjs` hardcodes `/usr/bin/hdiutil`, `/usr/bin/codesign`
-  and `/usr/bin/plutil`. There is no non-macOS packaging path.
+  and `/usr/bin/plutil`. There is no non-macOS packaging path — Windows never produces an
+  installer or a distributable binary.
 - **The Vite dev server is not a way around that.** Its `configureServer` hook reads
-  `apps/desktop/src/app/dist/renderer/index.html`, which only `bootstrap` produces. Without macOS
-  and the artifact, `apps/desktop/src/app/` contains nothing but a `package.json`.
+  `apps/desktop/src/app/dist/renderer/index.html`, which only `bootstrap`/`bootstrap-windows`
+  produces.
 
-So on Windows or Linux you get a real development loop over the reconstructed TypeScript — edit,
-typecheck, test, build — but you cannot execute the application.
+So on Windows you get a real development loop over the reconstructed TypeScript — edit,
+typecheck, test, build — and, unlike before, a build that actually completes and an application
+that starts. It does not yet render a UI: the Electron main process aborts before creating a
+window, because a production-binding check requires two macOS-only APIs unconditionally. See
+[`docs/fork/WINDOWS.md`](docs/fork/WINDOWS.md) for the full trace and
+[ADR 0008](docs/fork/decisions/0008-suporte-a-windows.md) for the decisions behind this support.
 
 ## Build
 

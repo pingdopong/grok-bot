@@ -4,8 +4,14 @@ O upstream suporta um alvo só, macOS arm64. Este documento registra uma
 investigação que foi bem mais longe do que a documentação sugeria — e o ponto
 exato onde parou.
 
-**Estado: bootstrap funciona, build não conclui.** O que falta está identificado
-e é bounded, não aberto.
+**Estado: o build conclui, o app inicializa, a UI não renderiza.** O bloqueio de
+build que travava esta investigação (`LNK1117`, ver "Bloqueio de build
+(resolvido)" abaixo) está resolvido. O que falta agora é pontual, não aberto: uma
+validação de composição em `source/electron-main/production-binding-providers.ts`
+que exige duas APIs exclusivas do macOS mesmo quando o processo roda no
+Windows. Ver "Resultado da execução" abaixo e a
+[ADR 0008](decisions/0008-suporte-a-windows.md), que registra as três escolhas
+por trás deste suporte e o estado alcançado.
 
 ## Por que era plausível
 
@@ -47,28 +53,26 @@ O passo 5 é o achado central: o layout interno dos dois asars é idêntico
 | `app.asar` Windows          | `38e85c0e5042c0257db7925e1e55709d6d155d90d92fe26ad654127d509766e0` |
 | `app.asar` macOS (upstream) | `6665408168466f9cacc6087e917890c17f59d2e2e9c2404a5c4a59ad79c1de58` |
 
-## Onde para
+## Bloqueio de build (resolvido)
 
-`node scripts/build.mjs` avança até o estágio de nativos e falha em
-`stageNodeTreeSitterRuntime`, que compila `tree-sitter` para o **ABI do Node**
-(usado pelos daemons que rodam fora do Electron):
+`node scripts/build.mjs` chegava a avançar até o estágio de nativos e falhava
+em `stageNodeTreeSitterRuntime`, que compilava `tree-sitter` para o **ABI do
+Node** (usado pelos daemons que rodam fora do Electron):
 
 ```
 LINK : fatal error LNK1117: erro de sintaxe na opção 'opt:lldltojobs=2'
 ```
 
-Isso é o `link.exe` da Microsoft recebendo uma flag do `lld`. Não é defeito deste
-projeto: é a toolchain do Node 26 no Windows. MSVC Build Tools e Python estão
-presentes e são encontrados corretamente; o `node-gyp` roda; a compilação é que
-quebra na hora de linkar.
+Isso era o `link.exe` da Microsoft recebendo uma flag do `lld`. Não era defeito
+deste projeto: é a toolchain do Node 26 no Windows. MSVC Build Tools e Python
+estavam presentes e eram encontrados corretamente; o `node-gyp` rodava; a
+compilação é que quebrava na hora de linkar. O caminho de ABI Electron
+(`build-tree-sitter-electron.mjs`) nunca chegou a ser exercitado, porque exige
+`ELECTRON_HEADERS_DIR` — os headers oficiais do Electron 42.1.0, download
+público e legítimo, mas mais um passo.
 
-O caminho de ABI Electron (`build-tree-sitter-electron.mjs`) não foi exercitado
-porque exige `ELECTRON_HEADERS_DIR` — os headers oficiais do Electron 42.1.0,
-que são download público e legítimo, mas mais um passo.
-
-## O que provavelmente resolve
-
-**O instalador Windows já traz todos os nativos compilados.** Confirmado em
+**A resolução não foi consertar o link — foi não precisar dele.** O instalador
+Windows já traz todos os nativos compilados, confirmado em
 `app.asar.unpacked/dist/deps`:
 
 ```
@@ -81,48 +85,52 @@ whichlang-node-win32-x64-msvc/whichlang-node.win32-x64-msvc.node
 native/sand-webauthn-signer.exe
 ```
 
-Ou seja: compilar tree-sitter do zero no Windows é provavelmente desnecessário. O
-build já reaproveita os nativos fixados do upstream para `dist/deps` e
-`dist/native`; a pergunta em aberto é se `dist/node-deps` pode vir da mesma
-fonte.
-
-**A dúvida que decide isso:** o app Windows original **não traz** `dist/node-deps`.
-Os daemons (`box-exec-daemon`, `local-exec-daemon`, `node-agent-coordinator`)
-precisam de nativos com ABI de Node, e o `node-deps` é adição da reconstrução.
-Antes de reaproveitar os binários é preciso saber sob qual runtime esses daemons
-sobem no Windows — Node do sistema ou o Node embutido no Electron. Se for o do
-Electron, os binários do instalador servem direto.
+A dúvida que decidia isso era sob qual runtime os daemons (`box-exec-daemon`,
+`local-exec-daemon`, `node-agent-coordinator`) sobem no Windows — Node do
+sistema ou o Node embutido no Electron. Resposta medida: o Electron embutido.
+`ELECTRON_RUN_AS_NODE=1` preserva `process.versions.electron`, então o processo
+empacotado resolve `dist/deps` — o mesmo diretório que o instalador já traz —
+em vez de precisar de um `dist/node-deps` reconstruído do zero.
+`stageNodeTreeSitterRuntime`, em `build-tree-sitter-node.mjs`, agora tem uma
+guarda de `process.platform === "win32"` que pula a compilação inteira; e
+`lib/clean-build.mjs` parou de sobrepor `dist/node-deps` no Windows, como
+consequência direta — senão a limpeza apagaria o que a guarda decidiu não
+reconstruir. Nenhuma compilação de tree-sitter de ABI Node acontece mais no
+Windows, e não precisa.
 
 ## Edições que isto custou
 
-Três arquivos do upstream, todas marcadas `[FORK]` e todas upstreamáveis:
+A lista cresceu desde esta primeira investigação e agora vive em um único
+lugar, para não haver duas listas que divirjam:
+[`CUSTOMIZATIONS.md`](CUSTOMIZATIONS.md) tem a tabela completa de arquivos
+editados e novos, e a [ADR 0008](decisions/0008-suporte-a-windows.md) tem as
+três escolhas que os sustentam. Hoje são **11 arquivos do upstream editados**
+(eram 9 antes desta leva) e **sete arquivos novos** de scripts e testes,
+todos marcados `[FORK]`.
 
-| Arquivo                                  | Mudança                                                                   |
-| ---------------------------------------- | ------------------------------------------------------------------------- |
-| `scripts/lib/build-asar.mjs`             | resolve o `dist/` unpacked por plataforma, via `lib/runtime-unpacked.mjs` |
-| `scripts/build-tree-sitter-node.mjs`     | invoca o entrypoint JS do node-gyp                                        |
-| `scripts/build-tree-sitter-electron.mjs` | idem                                                                      |
-
-A troca do node-gyp merece nota: o upstream chamava o shim `node-gyp.cmd`, e
-desde a correção do CVE-2024-27980 o `spawn` de um `.cmd` sem `shell: true` falha
-com `EINVAL` no Windows. Usar `shell: true` trocaria um problema por outro
-(quoting de caminhos com espaço), então passamos a invocar o JS do node-gyp com o
-próprio Node — sem shim, sem shell, igual nas três plataformas.
-
-Arquivos novos (tier 2, sem conflito com o upstream): `bootstrap-windows.mjs`,
-`lib/windows-config.mjs`, `lib/runtime-unpacked.mjs`, `lib/node-gyp.mjs`.
+Uma nota que vale reter aqui: a troca do node-gyp. O upstream chamava o shim
+`node-gyp.cmd`, e desde a correção do CVE-2024-27980 o `spawn` de um `.cmd` sem
+`shell: true` falha com `EINVAL` no Windows. Usar `shell: true` trocaria um
+problema por outro (quoting de caminhos com espaço), então passamos a invocar
+o JS do node-gyp com o próprio Node — sem shim, sem shell, igual nas três
+plataformas.
 
 ## Riscos que continuam de pé
 
 - **O sandbox não tem contraparte.** `packages/shell-exec/sandbox/macos` é
   Seatbelt; o que depender dele vai falhar ou precisará ficar desligado no
-  Windows. Isso só se mede com o app rodando.
+  Windows. O app chegou a inicializar (ver "Resultado da execução"), mas
+  morreu antes de qualquer caminho de sandbox ser exercitado — isso continua
+  só se medindo com o app rodando de verdade.
 - **A reconstrução foi validada contra o asar macOS.** O patch do renderer
   localiza chunks por padrão de conteúdo e não por hash fixado, o que é
-  favorável, mas não foi exercitado contra o payload Windows.
-- **A superfície de diff cresceu.** Três edições e quatro arquivos novos, contra
-  a disciplina que o resto do dossiê defende. Se o Windows não for seguir, vale
-  reverter em vez de manter código não exercitado.
+  favorável, mas o renderer nunca chegou a rodar no Windows — o processo
+  morre no main process, antes de criar janela.
+- **A superfície de diff cresceu.** De 9 para 11 arquivos do upstream editados,
+  mais sete arquivos novos — ver [`CUSTOMIZATIONS.md`](CUSTOMIZATIONS.md) e a
+  [ADR 0008](decisions/0008-suporte-a-windows.md). Se o Windows não for
+  seguir, vale reverter em vez de manter código não exercitado; nenhuma dessas
+  edições altera comportamento em `darwin`.
 
 ## Resultado da execução (2026-09-06)
 
