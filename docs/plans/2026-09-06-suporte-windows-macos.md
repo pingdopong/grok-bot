@@ -28,6 +28,31 @@ evitado, deixando de compilar no Windows algo que o runtime empacotado não carr
   Lefthook não acham `oxlint`/`oxfmt`.
 - Node fixado em `>=26.5.0 <27`; ative com `eval "$(fnm env --shell bash)"`.
 
+## Estrutura de arquivos
+
+Onde cada responsabilidade mora. Base atual, medida: **25 testes passando** e **9 arquivos do
+upstream editados** (`git grep -l "\[FORK\]" -- apps/desktop`, cruzado com `upstream-mirror` para
+separar edição de arquivo novo).
+
+| Arquivo                                                            | Responsabilidade                                      | Tarefa |
+| ------------------------------------------------------------------ | ----------------------------------------------------- | ------ |
+| `apps/desktop/scripts/ensure-electron-binary.mjs`                  | provisionar o Electron e validar o resultado          | 1      |
+| `apps/desktop/scripts/build-tree-sitter-node.mjs`                  | **modificar**: pular o estágio de ABI Node no Windows | 2      |
+| `apps/desktop/scripts/run-windows.mjs`                             | executar o app montado, sem empacotar                 | 4      |
+| `apps/desktop/package.json`                                        | **modificar**: registrar `run:windows`                | 4      |
+| `.github/workflows/ci.yml`                                         | **modificar**: job de smoke no `windows-latest`       | 5      |
+| `docs/fork/decisions/0008-suporte-a-windows.md`                    | registrar as três escolhas de arquitetura             | 6      |
+| `README.md`, `docs/fork/WINDOWS.md`, `docs/fork/CUSTOMIZATIONS.md` | **modificar**: documentação das duas plataformas      | 6      |
+
+Testes, um por tarefa, todos em `apps/desktop/tests/`: `fork-electron-binary`,
+`fork-node-deps-windows`, `fork-windows-build-contract`, `fork-platform-parity`.
+
+Cada arquivo novo é tier 2 e não conflita com o upstream. A única modificação em arquivo do upstream
+é `build-tree-sitter-node.mjs`, na Tarefa 2 — e ele **já está** na lista dos nove editados, desde a
+correção do `node-gyp` no PR #10. Ou seja: este plano não abre nenhuma frente tier 4 nova, só
+aprofunda uma existente. A superfície de manutenção contra o upstream não cresce em número de
+arquivos.
+
 ## Fatos verificados que o plano assume
 
 Medidos nesta máquina, não inferidos:
@@ -72,35 +97,49 @@ binário não há como rodar nada, então isto vem primeiro.
 - Produz: `ensureElectronBinary(): Promise<string>` — caminho absoluto do executável do Electron,
   garantindo que existe. Usado pela Tarefa 4.
 
+- [ ] **Passo 0: Preparar o worktree**
+
+```bash
+eval "$(fnm env --shell bash)" && pnpm install --frozen-lockfile
+```
+
+Esperado: `Done in ...`. Sem isto os hooks do Lefthook falham no primeiro commit por não acharem
+`oxlint`/`oxfmt`, e os testes não resolvem `@electron/asar`.
+
 - [ ] **Passo 1: Escrever o teste que falha**
 
 ```js
 // apps/desktop/tests/fork-electron-binary.test.mjs
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
-// [FORK] Arquivo novo deste fork.
-const desktopRoot = path.resolve(import.meta.dirname, "..");
+import { electronExecutable } from "../scripts/ensure-electron-binary.mjs";
 
-test("o provisionador do Electron nao confia no install.js sozinho", async () => {
-  const source = await readFile(
-    path.join(desktopRoot, "scripts", "ensure-electron-binary.mjs"),
-    "utf8",
+// [FORK] Arquivo novo deste fork.
+//
+// Testa comportamento, nao o texto do arquivo: grep no proprio fonte passa assim
+// que a string e escrita, e nao prova nada.
+
+test("o caminho do executavel segue a convencao da plataforma", () => {
+  const executable = electronExecutable();
+  assert.ok(path.isAbsolute(executable), "precisa ser caminho absoluto");
+  assert.ok(
+    executable.includes(path.join("node_modules", "electron", "dist")),
+    "precisa apontar para o Electron do workspace",
   );
-  // O install.js do Electron sai 0 mesmo extraindo pela metade; o provisionador
-  // precisa validar o resultado, nao o codigo de saida.
-  assert.match(source, /electronExecutable/);
-  assert.match(source, /tar\.exe/);
-  assert.doesNotMatch(source, /process\.exit\(0\)/);
+  if (process.platform === "win32") {
+    assert.ok(executable.endsWith("electron.exe"));
+  } else if (process.platform === "darwin") {
+    assert.ok(executable.endsWith(path.join("Contents", "MacOS", "Electron")));
+  }
 });
 ```
 
 - [ ] **Passo 2: Rodar e ver falhar**
 
 Rodar: `node --test apps/desktop/tests/fork-electron-binary.test.mjs`
-Esperado: FAIL com `ENOENT` em `scripts/ensure-electron-binary.mjs`.
+Esperado: FAIL com `ERR_MODULE_NOT_FOUND` — `scripts/ensure-electron-binary.mjs` ainda não existe.
 
 - [ ] **Passo 3: Implementar**
 
@@ -137,11 +176,16 @@ async function exists(target) {
   }
 }
 
+// So Windows e macOS interessam: sao as duas plataformas que este fork suporta.
+function electronCacheRoot() {
+  if (process.platform === "win32") {
+    return path.join(process.env.LOCALAPPDATA ?? "", "electron", "Cache");
+  }
+  return path.join(process.env.HOME ?? "", "Library", "Caches", "electron");
+}
+
 async function cachedZip() {
-  const cacheRoot =
-    process.platform === "win32"
-      ? path.join(process.env.LOCALAPPDATA ?? "", "electron", "Cache")
-      : path.join(process.env.HOME ?? "", "Library", "Caches", "electron");
+  const cacheRoot = electronCacheRoot();
   if (!(await exists(cacheRoot))) return null;
   for (const entry of await readdir(cacheRoot, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
@@ -235,7 +279,8 @@ rodar sob Node de sistema, o próprio projeto falha com `SAND_TREE_SITTER_RUNTIM
 ```js
 // apps/desktop/tests/fork-node-deps-windows.test.mjs
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
@@ -248,14 +293,20 @@ import test from "node:test";
 // dist/deps -- que vem do instalador. node-deps nao e carregado.
 const desktopRoot = path.resolve(import.meta.dirname, "..");
 
-test("o build nao compila tree-sitter de ABI Node no Windows", async () => {
-  const source = await readFile(
-    path.join(desktopRoot, "scripts", "build-tree-sitter-node.mjs"),
-    "utf8",
-  );
-  assert.match(source, /process\.platform === "win32"/);
-  assert.match(source, /\[FORK\]/);
-});
+test(
+  "no Windows o estagiamento de node-deps e pulado",
+  { skip: process.platform === "win32" ? false : "comportamento especifico do Windows" },
+  async () => {
+    const { stageNodeTreeSitterRuntime } = await import("../scripts/build-tree-sitter-node.mjs");
+    const outputRoot = await mkdtemp(path.join(tmpdir(), "fork-node-deps-"));
+    try {
+      // Sem o guarda, isto dispararia o node-gyp e quebraria em LNK1117.
+      assert.equal(await stageNodeTreeSitterRuntime(outputRoot), null);
+    } finally {
+      await rm(outputRoot, { recursive: true, force: true });
+    }
+  },
+);
 
 test("o contrato do shell-parser que justifica isso continua valendo", async () => {
   const parser = await readFile(
@@ -271,7 +322,9 @@ test("o contrato do shell-parser que justifica isso continua valendo", async () 
 - [ ] **Passo 2: Rodar e ver falhar**
 
 Rodar: `node --test apps/desktop/tests/fork-node-deps-windows.test.mjs`
-Esperado: FAIL no primeiro teste — `build-tree-sitter-node.mjs` ainda não tem o ramo `win32`.
+Esperado no Windows: FAIL no primeiro teste — sem o guarda, `stageNodeTreeSitterRuntime` dispara o
+node-gyp e quebra em `LNK1117` em vez de devolver `null`. No macOS o primeiro teste é pulado e só o
+segundo roda.
 
 - [ ] **Passo 3: Implementar**
 
@@ -319,7 +372,9 @@ Esperado: PASS nos dois.
 - [ ] **Passo 5: Rodar a suíte inteira**
 
 Rodar: `pnpm turbo run typecheck source:typecheck test`
-Esperado: `Tasks: 3 successful`, testes 27 pass / 0 fail (25 anteriores + 2 novos).
+Esperado: `Tasks: 3 successful`. Contagem: base 25 + 1 (Tarefa 1) + 2 (Tarefa 2) = **28** no
+Windows; no macOS, **27 pass e 1 skipped**, porque o teste do guarda `win32` é pulado fora do
+Windows.
 
 - [ ] **Passo 6: Commit**
 
@@ -352,7 +407,14 @@ verificação, e existe separada porque um revisor pode aprovar a Tarefa 2 e rej
 **Interfaces:**
 
 - Consome: `stageNodeTreeSitterRuntime` devolvendo `null` no Windows (Tarefa 2).
-- Produz: `.build/app.asar` e `.build/app/` no Windows. A Tarefa 4 consome `.build/app/`.
+- Produz: `.build/fidelity/app.asar` e `.build/fidelity/app/`. A Tarefa 4 consome
+  `fidelityStagedAppDir`.
+
+> **Atenção ao caminho.** `build.mjs` chama `buildFidelityReconstructedAsar`, cujos defaults são
+> `stageRoot = fidelityStagedAppDir` e `archivePath = fidelityBuiltAsar` — ou seja,
+> `.build/fidelity/app` e `.build/fidelity/app.asar`. As constantes `stagedAppDir` e `builtAsar`
+> (`.build/app`, `.build/app.asar`) existem mas pertencem ao caminho `buildAsar` direto, que
+> `build.mjs` **não** usa. Confundir os dois faz a Tarefa 4 falhar com "nenhum app montado".
 
 - [ ] **Passo 1: Rodar o bootstrap Windows**
 
@@ -367,12 +429,25 @@ src/app/dist hidratado a partir do payload Windows 0.18.0.
 - [ ] **Passo 2: Rodar o build**
 
 Rodar: `cd apps/desktop && node scripts/build.mjs`
-Esperado: `Reconstructed ASAR: ...\.build\app.asar` e nenhum erro de link.
+Esperado, nesta ordem:
 
-Se ainda falhar, **pare e leia o erro**: o próximo suspeito é `dist/deps` ausente no staging, não o
-node-gyp.
+```
+Fidelity hybrid ASAR ready: ...\.build\fidelity\app.asar
+Fail-closed composition audit embedded: ...
+Reconstructed ASAR: ...\.build\fidelity\app.asar
+Renderer mode: checksum-pinned upstream 0.18.0 payload
+```
 
-- [ ] **Passo 3: Escrever o teste de contrato**
+- [ ] **Passo 3: Confirmar o que foi montado**
+
+Rodar: `ls apps/desktop/.build/fidelity/app/dist`
+Esperado: contém `deps/` e `native/`, e **não** contém `node-deps/` (é isso que a Tarefa 2 decidiu).
+
+Se o build ainda falhar, **pare e leia o erro**. Dois suspeitos, nesta ordem: `dist/deps` ausente no
+staging (o bootstrap Windows não rodou), ou o patch do renderer não encontrando os chunks esperados
+no payload Windows — que é um risco conhecido e registrado em `docs/fork/WINDOWS.md`.
+
+- [ ] **Passo 4: Escrever o teste de contrato**
 
 ```js
 // apps/desktop/tests/fork-windows-build-contract.test.mjs
@@ -407,12 +482,12 @@ test("o payload 7z e localizado por assinatura, nao por offset fixo", async () =
 });
 ```
 
-- [ ] **Passo 4: Rodar e ver passar**
+- [ ] **Passo 5: Rodar e ver passar**
 
 Rodar: `node --test apps/desktop/tests/fork-windows-build-contract.test.mjs`
 Esperado: PASS nos dois.
 
-- [ ] **Passo 5: Commit**
+- [ ] **Passo 6: Commit**
 
 ```bash
 git add apps/desktop/tests/fork-windows-build-contract.test.mjs
@@ -439,7 +514,7 @@ notarização — é onde mora todo o macOS, e nada disso é necessário para ro
 
 **Interfaces:**
 
-- Consome: `ensureElectronBinary()` (Tarefa 1); `.build/app/` (Tarefa 3).
+- Consome: `ensureElectronBinary()` (Tarefa 1); `fidelityStagedAppDir` (Tarefa 3).
 
 - [ ] **Passo 1: Implementar o runner**
 
@@ -457,7 +532,7 @@ notarização — é onde mora todo o macOS, e nada disso é necessário para ro
 import { access } from "node:fs/promises";
 import path from "node:path";
 
-import { stagedAppDir } from "./lib/config.mjs";
+import { fidelityStagedAppDir } from "./lib/config.mjs";
 import { ensureElectronBinary } from "./ensure-electron-binary.mjs";
 import { run } from "./lib/process.mjs";
 
@@ -474,10 +549,13 @@ if (process.platform !== "win32") {
   throw new Error("run-windows.mjs e especifico do Windows; no macOS use `npm run package`.");
 }
 
-if (!(await exists(path.join(stagedAppDir, "package.json")))) {
+// build.mjs monta em fidelityStagedAppDir (.build/fidelity/app), nao em
+// stagedAppDir (.build/app) -- este ultimo pertence ao caminho buildAsar direto,
+// que build.mjs nao usa.
+if (!(await exists(path.join(fidelityStagedAppDir, "package.json")))) {
   throw new Error(
     [
-      `Nenhum app montado em ${stagedAppDir}.`,
+      `Nenhum app montado em ${fidelityStagedAppDir}.`,
       "Rode antes: node scripts/bootstrap-windows.mjs && node scripts/build.mjs",
     ].join("\n"),
   );
@@ -485,9 +563,9 @@ if (!(await exists(path.join(stagedAppDir, "package.json")))) {
 
 const electron = await ensureElectronBinary();
 console.log(`Electron: ${electron}`);
-console.log(`App:      ${stagedAppDir}`);
+console.log(`App:      ${fidelityStagedAppDir}`);
 
-await run(electron, [stagedAppDir], {
+await run(electron, [fidelityStagedAppDir], {
   env: { ...process.env, SAND_PACKAGED: "1" },
   stdio: "inherit",
 });
@@ -532,6 +610,22 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
+## Ponto de decisão — depois da Tarefa 4
+
+O plano existe para chegar até aqui com uma resposta. As Tarefas 5 e 6 só valem a pena em dois dos
+três resultados possíveis. **Decida antes de continuar.**
+
+| Resultado da Tarefa 4          | O que fazer                                                                                                                                                                                                                                                      |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A UI subiu**                 | Siga para as Tarefas 5 e 6. Registre no ADR 0008 o que funciona e o que não foi testado.                                                                                                                                                                         |
+| **Subiu e quebrou em runtime** | Siga para 5 e 6 assim mesmo — o código funciona o bastante para merecer os testes de paridade e a documentação. Registre a falha em `docs/fork/WINDOWS.md` com o stack completo, e abra a questão do sandbox como trabalho separado.                             |
+| **Não subiu**                  | **Pare.** Não faça as Tarefas 5 e 6. Registre em `docs/fork/WINDOWS.md` onde parou e execute a recomendação que já está lá: reverter em vez de manter código não exercitado. Um branch com bootstrap e runner que ninguém consegue usar é dívida, não progresso. |
+
+Essa terceira linha não é pessimismo: é a regra que o próprio dossiê já estabeleceu, e ela existe
+para que abandonar seja uma escolha barata em vez de uma derrota.
+
+---
+
 ### Tarefa 5: Provar que o macOS não regrediu
 
 Todas as mudanças anteriores tocam código compartilhado. Esta tarefa fecha o contrato das duas
@@ -573,15 +667,16 @@ test("o resolvedor de runtime preserva o caminho do bundle no macOS", async () =
   assert.match(resolver, /resolveRuntimeApp/);
 });
 
-test("o node-deps segue sendo estagiado fora do Windows", async () => {
-  const source = await readFile(
-    path.join(desktopRoot, "scripts", "build-tree-sitter-node.mjs"),
-    "utf8",
+test("o caminho de compilacao do node-deps foi guardado, nao removido", async () => {
+  // Contrato de modulo em vez de offsets de texto: comparar posicoes com indexOf
+  // quebra a cada reformatacao e nao prova nada sobre comportamento.
+  const module = await import("../scripts/build-tree-sitter-node.mjs");
+  assert.equal(typeof module.stageNodeTreeSitterRuntime, "function");
+  assert.equal(
+    typeof module.ensureNodeTreeSitterRuntime,
+    "function",
+    "o compilador de ABI Node precisa continuar existindo para macOS e Linux",
   );
-  const guard = source.indexOf('if (process.platform === "win32") return null;');
-  const staging = source.indexOf('path.join(outputRoot, "dist", "node-deps")');
-  assert.ok(guard > 0, "o guarda de win32 precisa existir");
-  assert.ok(staging > guard, "o estagiamento precisa continuar depois do guarda, nao ser removido");
 });
 ```
 
@@ -593,11 +688,13 @@ Esperado: PASS nos três.
 - [ ] **Passo 3: Rodar a suíte inteira**
 
 Rodar: `pnpm turbo run format:check lint typecheck source:typecheck frontend:build test`
-Esperado: `Tasks: 6 successful`, 30 pass / 0 fail.
+Esperado: `Tasks: 6 successful`. Contagem: 25 + 1 + 2 + 2 + 3 = **33** no Windows; **32 pass e 1
+skipped** no macOS.
 
 - [ ] **Passo 4: Acrescentar o smoke Windows ao CI**
 
-Em `.github/workflows/ci.yml`, ao final do job `quality`, após o passo "Varredura de marca":
+Em `.github/workflows/ci.yml`, acrescentar um **job novo** sob `jobs:`, irmão de `quality` — não um
+passo dentro dele. Os dois rodam em paralelo:
 
 ```yaml
 windows-smoke:
@@ -639,6 +736,12 @@ windows-smoke:
         grep -q "Instalador 0.18.0 nao encontrado" err.txt
         grep -q "docs/fork/PACKAGING.md" err.txt
 ```
+
+> **Risco conhecido deste job.** `pnpm install` no `windows-latest` executa os scripts de install de
+> `tree-sitter` e `tree-sitter-bash`. Se eles caírem no `node-gyp` em vez de usar prebuilds, o job
+> bate no mesmo `LNK1117` da Tarefa 2 — que ali é evitado no _build_, não no _install_. Se isso
+> acontecer, a correção é acrescentar `--ignore-scripts` a este job específico e registrar o motivo
+> em `docs/fork/WINDOWS.md`; não é para "consertar" o linker.
 
 - [ ] **Passo 5: Validar o YAML**
 
@@ -736,7 +839,7 @@ macOS continua sendo a única plataforma que produz um `.app` distribuível. Det
 Em `docs/fork/CUSTOMIZATIONS.md`, na tabela "Tier 4", acrescentar:
 
 ```markdown
-| `apps/desktop/scripts/build-tree-sitter-node.mjs` | +14 -0 | não compila ABI Node no Windows | sim |
+| `apps/desktop/scripts/build-tree-sitter-node.mjs` | guarda `win32` em `stageNodeTreeSitterRuntime` | não compila ABI Node no Windows | sim |
 ```
 
 E em "Tier 2 -- arquivos novos":
@@ -749,7 +852,8 @@ E em "Tier 2 -- arquivos novos":
 - [ ] **Passo 4: Rodar a suíte e formatar**
 
 Rodar: `pnpm exec oxfmt && pnpm turbo run format:check lint typecheck source:typecheck test`
-Esperado: `Tasks: 5 successful`, 30 pass / 0 fail.
+Esperado: `Tasks: 5 successful`, mesma contagem da Tarefa 5 (**33** no Windows, **32 + 1 skipped** no
+macOS).
 
 - [ ] **Passo 5: Commit**
 
@@ -771,7 +875,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - [ ] `pnpm turbo run format:check lint typecheck source:typecheck frontend:build test` verde
 - [ ] `cd apps/desktop && node scripts/bootstrap-windows.mjs && node scripts/build.mjs` conclui
 - [ ] `node scripts/run-windows.mjs` — resultado registrado em `docs/fork/WINDOWS.md`, qualquer
-      que seja
+      que seja, e o ponto de decisão acima aplicado
 - [ ] `git diff --find-renames --numstat upstream-mirror..HEAD | awk '$1!="0" || $2!="0"'` — a
       superfície cresceu de forma explicável e está em `CUSTOMIZATIONS.md`
 - [ ] `bash scripts/brand-sweep.sh` continua passando
