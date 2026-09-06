@@ -45,3 +45,9 @@ formato adotado funciona na 10.27 de hoje e sobrevive a v11.
   identidade de inode e nao conteudo. E efeito do `copy`, nao dano.
 - Cada worktree precisa do proprio `pnpm install` antes do primeiro commit, ou os
   hooks do Lefthook falham por nao achar os binarios.
+- **No Windows, o `copy` custa I/O e ocasionalmente falha.** Sao ~320 pacotes
+  copiados por worktree em vez de ligados, e ja foi observado um
+  `ERR_PNPM_UNKNOWN: copyfile` transitorio no meio de um install -- tipicamente
+  antivirus ou lock de arquivo. Repetir o `pnpm install` resolve. Nao vale
+  trocar a decisao por isso: o risco que o `copy` evita e corromper o store
+  global compartilhado com os outros projetos da maquina.
