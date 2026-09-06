@@ -112,8 +112,6 @@ Esperado: FAIL com `ENOENT` em `scripts/ensure-electron-binary.mjs`.
 // meio da extracao -- observado nesta base: restaram apenas locales/, sem o
 // executavel. Este provisionador valida o RESULTADO em vez do codigo de saida, e
 // cai para o bsdtar que ja vem no Windows quando a extracao ficou incompleta.
-import { createHash } from "node:crypto";
-import { createReadStream } from "node:fs";
 import { access, mkdir, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 
