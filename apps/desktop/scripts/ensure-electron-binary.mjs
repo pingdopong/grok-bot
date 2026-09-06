@@ -11,7 +11,12 @@ import { pathToFileURL } from "node:url";
 import { nodeModulesPath } from "./lib/node-modules.mjs";
 import { run } from "./lib/process.mjs";
 
-const electronDist = nodeModulesPath("electron", "dist");
+// [FORK] Resolve a partir do package.json, que sempre existe: resolver
+// diretamente "electron/dist" falharia na primeira execucao, quando o dist
+// ainda nao foi baixado, e cairia no fallback do repoRoot -- um diretorio
+// diferente daquele onde o install.js do Electron escreve.
+const electronRoot = path.dirname(nodeModulesPath("electron", "package.json"));
+const electronDist = path.join(electronRoot, "dist");
 
 export function electronExecutable() {
   if (process.platform === "win32") return path.join(electronDist, "electron.exe");
