@@ -51,9 +51,20 @@ function snapshotDiff(before, after) {
 async function archiveFileEntries(archivePath) {
   const entries = new Map();
   for (const raw of listPackage(archivePath)) {
-    const relative = raw.replace(/^\//, "");
+    // [FORK] No Windows, listPackage() devolve caminhos com path.sep nativo
+    // ("\dist\box-exec-daemon\main.cjs"), e statFile() delega para
+    // Filesystem#getNode, que anda na arvore de diretorios via
+    // `p.split(path.sep)` -- ele exige que os separadores internos continuem
+    // sendo o separador nativo do SO. Converter tudo para "/" antes de chamar
+    // statFile quebra esse split no Windows (path.sep e "\") e faz toda
+    // entrada aninhada falhar (medido: so 7 de 1115 resolviam). A chave do
+    // Map, por sua vez, precisa bater com os caminhos relativos que
+    // walkFiles() produz, e esses ja sao normalizados para "/" -- por isso
+    // duas variantes: uma para a lookup, outra para a chave.
+    const withoutLeadingSeparator = raw.startsWith(path.sep) ? raw.slice(path.sep.length) : raw;
+    const relative = withoutLeadingSeparator.split(path.sep).join("/");
     try {
-      const entry = statFile(archivePath, relative);
+      const entry = statFile(archivePath, withoutLeadingSeparator);
       if (typeof entry.size === "number") entries.set(relative, entry);
     } catch {
       // listPackage includes directories; statFile is the file boundary.
