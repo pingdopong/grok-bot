@@ -4,14 +4,16 @@ O upstream suporta um alvo só, macOS arm64. Este documento registra uma
 investigação que foi bem mais longe do que a documentação sugeria — e o ponto
 exato onde parou.
 
-**Estado: o build conclui, o app inicializa, a UI não renderiza.** O bloqueio de
+**Estado: o build conclui, o app inicializa, a UI renderiza.** O bloqueio de
 build que travava esta investigação (`LNK1117`, ver "Bloqueio de build
-(resolvido)" abaixo) está resolvido. O que falta agora é pontual, não aberto: uma
-validação de composição em `source/electron-main/production-binding-providers.ts`
-que exige duas APIs exclusivas do macOS mesmo quando o processo roda no
-Windows. Ver "Resultado da execução" abaixo e a
-[ADR 0008](decisions/0008-suporte-a-windows.md), que registra as três escolhas
-por trás deste suporte e o estado alcançado.
+(resolvido)" abaixo) está resolvido. O bloqueio de composição que impedia a
+janela de aparecer — uma validação em
+`source/electron-main/production-binding-providers.ts` que exigia duas APIs
+exclusivas do macOS mesmo quando o processo roda no Windows — também está
+resolvido: a janela "Grok Bot" abre e a tela de login renderiza. Ver
+"Resultado da execução" e "A UI renderiza" abaixo, e a
+[ADR 0008](decisions/0008-suporte-a-windows.md), que registra as quatro
+escolhas por trás deste suporte e o estado alcançado.
 
 ## Por que era plausível
 
@@ -104,9 +106,12 @@ A lista cresceu desde esta primeira investigação e agora vive em um único
 lugar, para não haver duas listas que divirjam:
 [`CUSTOMIZATIONS.md`](CUSTOMIZATIONS.md) tem a tabela completa de arquivos
 editados e novos, e a [ADR 0008](decisions/0008-suporte-a-windows.md) tem as
-três escolhas que os sustentam. Hoje são **11 arquivos do upstream editados**
+quatro escolhas que os sustentam — a quarta é a edição em `source/` descrita
+em "A UI renderiza" abaixo. Hoje são **11 arquivos do upstream editados**
 (eram 9 antes desta leva) e **sete arquivos novos** de scripts e testes,
-todos marcados `[FORK]`.
+todos marcados `[FORK]`, mais a edição pontual em `source/` que não está
+nessa contagem porque é de categoria diferente: toolchain de build versus
+código do produto.
 
 Uma nota que vale reter aqui: a troca do node-gyp. O upstream chamava o shim
 `node-gyp.cmd`, e desde a correção do CVE-2024-27980 o `spawn` de um `.cmd` sem
@@ -119,14 +124,17 @@ plataformas.
 
 - **O sandbox não tem contraparte.** `packages/shell-exec/sandbox/macos` é
   Seatbelt; o que depender dele vai falhar ou precisará ficar desligado no
-  Windows. O app chegou a inicializar (ver "Resultado da execução"), mas
-  morreu antes de qualquer caminho de sandbox ser exercitado — isso continua
-  só se medindo com o app rodando de verdade.
+  Windows. A UI agora renderiza (ver "A UI renderiza" abaixo), mas ninguém
+  autenticou e nenhuma funcionalidade além da tela inicial foi exercitada —
+  qualquer caminho que dependa do sandbox continua só se medindo quando essas
+  funcionalidades forem de fato usadas.
 - **A reconstrução foi validada contra o asar macOS.** O patch do renderer
   localiza chunks por padrão de conteúdo e não por hash fixado, o que é
-  favorável, mas o renderer nunca chegou a rodar no Windows — o processo
-  morre no main process, antes de criar janela.
-- **A superfície de diff cresceu.** De 9 para 11 arquivos do upstream editados,
+  favorável. O renderer agora roda no Windows e produz a tela de login
+  esperada (ver evidência abaixo), mas isso ainda não cobre login real nem o
+  restante da superfície do app.
+- **A superfície de diff cresceu.** De 9 para 11 arquivos do upstream editados
+  na leva anterior, mais um agora em `source/` (ver "A UI renderiza" abaixo),
   mais sete arquivos novos — ver [`CUSTOMIZATIONS.md`](CUSTOMIZATIONS.md) e a
   [ADR 0008](decisions/0008-suporte-a-windows.md). Se o Windows não for
   seguir, vale reverter em vez de manter código não exercitado; nenhuma dessas
@@ -200,3 +208,53 @@ criar janela, nada do renderer chegou a rodar.
 `createProductionStartupBinding` platform-aware — pular a exigência de
 `isInApplicationsFolder`/`moveToApplicationsFolder` fora do `darwin`, do mesmo
 jeito que `moveToApplicationsFolderIfNeeded` já faz.
+
+## A UI renderiza (2026-09-07)
+
+O próximo passo apontado acima foi feito, e destravou a UI: a janela "Grok
+Bot" abre e a tela de login renderiza.
+
+**A edição.** Em
+`source/electron-main/production-binding-providers.ts`,
+`createProductionStartupBinding` passou a exigir
+`electron.app.isInApplicationsFolder` e `electron.app.moveToApplicationsFolder`
+só quando `platform === "darwin"`, em vez de em toda plataforma. Não é um
+afrouxamento de validação: o único consumidor real dessas duas funções,
+`moveToApplicationsFolderIfNeeded` em
+`source/electron-main/startup/move-to-applications-folder.ts:19`, já retornava
+cedo com `options.platform !== "darwin"` e nunca chegava a chamá-las fora do
+macOS. A pré-condição de composição passou a espelhar exatamente o gate que já
+existia no ponto de uso — só ficou mais cedo, então o erro (se algum dia
+acontecer) aparece na composição dos bindings em vez de mais tarde dentro de
+`moveToApplicationsFolderIfNeeded`.
+
+**Evidência.** Confirmado via DevTools Protocol, lendo o DOM do processo
+renderer depois que o app subiu com `node scripts/run-windows.mjs`:
+
+- `firstHeading`: `"Grok Bot"`;
+- botão `"Sign in"` presente;
+- texto `"Your team of always-on agents that you can give real work to."`
+  presente;
+- carregado de `.build/fidelity/app/dist/renderer/index.html` — o mesmo
+  renderer hidratado pelo `bootstrap-windows.mjs` (ver "O que já funciona"
+  acima), agora efetivamente executado.
+
+![Tela de login do Grok Bot renderizando no Windows](assets/grok-bot-windows-render.png)
+
+**O que não foi testado.** Isto continua uma investigação de arranque, não uma
+validação de produto:
+
+- login de verdade — a tela renderiza, mas ninguém autenticou;
+- qualquer funcionalidade além da tela inicial;
+- o sandbox (`packages/shell-exec/sandbox/macos`, Seatbelt) continua sem
+  contraparte Windows — o que depender dele vai degradar, e isso só se mede
+  exercitando as funcionalidades que o usam, o que ainda não aconteceu.
+
+**Por que esta edição é diferente de todas as anteriores.** Toda a
+investigação Windows até aqui — bootstrap, build, os 11 arquivos editados e
+sete novos catalogados em [`CUSTOMIZATIONS.md`](CUSTOMIZATIONS.md) — tocou
+`scripts/`, a toolchain de build deste fork. Esta é a **primeira edição em
+`source/`**, o código reconstruído do próprio **produto**, que o restante
+deste dossiê trata como superfície a tocar o mínimo possível. É uma categoria
+de risco diferente, e foi feita com autorização pontual do usuário para
+reavaliar depois — não uma decisão tomada por padrão.
