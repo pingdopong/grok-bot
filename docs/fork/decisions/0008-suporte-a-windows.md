@@ -1,6 +1,6 @@
 # 0008 -- Suporte a Windows
 
-**Data:** 2026-09-06 - **Status:** aceita, com o app ainda não renderizando
+**Data:** 2026-09-06 - **Status:** aceita, com a UI renderizando
 
 ## Contexto
 
@@ -19,7 +19,7 @@ Suportar Windows x64 para **execução**, não para empacotamento. O bundle
 `.app`, o `codesign` e a notarização continuam macOS-only, e é neles que mora
 toda a dependência de plataforma que este fork não tenta remover.
 
-Três escolhas sustentam isso:
+Quatro escolhas sustentam isso:
 
 1. **Duas identidades fixadas, não uma trocada.** O instalador NSIS e o
    `app.asar` do Windows ganharam um `expectedSha256` próprio, ao lado do
@@ -38,64 +38,88 @@ Três escolhas sustentam isso:
    instalador nem bundle. É o mesmo raciocínio da Decisão 1 do ADR 0007:
    resolver o suficiente para executar, sem herdar a maquinaria de
    empacotamento que só faz sentido em macOS.
+4. **Exigir as APIs de Applications Folder só no macOS.** `createProductionStartupBinding`,
+   em `source/electron-main/production-binding-providers.ts`, validava
+   incondicionalmente que `electron.app.isInApplicationsFolder` e
+   `electron.app.moveToApplicationsFolder` existem, mas as duas são
+   exclusivas do macOS e isso derrubava o boot no Windows antes de criar
+   janela. Não é afrouxamento: o único consumidor,
+   `moveToApplicationsFolderIfNeeded` em
+   `source/electron-main/startup/move-to-applications-folder.ts:19`, já
+   retornava cedo fora do `darwin` e nunca chamava essas funções -- a
+   pré-condição passou a espelhar o gate que já existia no ponto de uso. Esta
+   escolha é de categoria diferente das três anteriores: é a primeira edição
+   deste dossiê em `source/`, o código reconstruído do **produto**, e não em
+   `scripts/`, a toolchain de build. Foi autorizada pontualmente pelo usuário
+   para reavaliar depois -- ver "Estado alcançado" abaixo.
 
 ## Estado alcançado
 
-**O build conclui no Windows.** As três correções acima destravam
+**O build conclui no Windows.** As três primeiras correções acima destravam
 `node scripts/build.mjs` de ponta a ponta -- o bloqueio `LNK1117` registrado
 neste mesmo dossiê em uma investigação anterior está resolvido.
 
-**O app inicializa e morre antes de criar janela.** Rodando
-`node scripts/run-windows.mjs`, o processo Electron sobe, mas a saída termina
-em:
+**Registro histórico (2026-09-06): o app inicializava e morria antes de criar
+janela.** Rodando `node scripts/run-windows.mjs`, o processo Electron subia,
+mas a saída terminava em:
 
 ```
 [sand-electron-main] fatal composition failure: Error: Electron production binding requires electron.app.isInApplicationsFolder()..
 ```
 
-A causa está isolada: `source/electron-main/production-binding-providers.ts`,
-função `createProductionStartupBinding` (por volta da linha 464-475), valida
-incondicionalmente que `ports.app.isInApplicationsFolder` e
+A causa estava isolada em `source/electron-main/production-binding-providers.ts`,
+função `createProductionStartupBinding` (por volta da linha 464-475), que
+validava incondicionalmente que `ports.app.isInApplicationsFolder` e
 `ports.app.moveToApplicationsFolder` existem como funções. Essas duas APIs são
 **exclusivas do macOS** -- no Electron para Windows a propriedade nem existe
-no objeto `app`, então a validação lança antes de qualquer janela ser criada.
-O uso real dessas APIs, em
-`source/electron-main/startup/move-to-applications-folder.ts`, já está
-corretamente condicionado a `options.platform !== "darwin"`; o defeito é só
-na checagem prévia de composição, que nunca foi tornada platform-aware.
+no objeto `app`, então a validação lançava antes de qualquer janela ser
+criada. O uso real dessas APIs, em
+`source/electron-main/startup/move-to-applications-folder.ts`, já estava
+corretamente condicionado a `options.platform !== "darwin"`; o defeito era só
+na checagem prévia de composição, que nunca tinha sido tornada
+platform-aware. Não era o risco que a investigação anterior deste suporte
+apontava como suspeito principal (`packages/shell-exec/sandbox/macos`) --
+esse caminho nem chegava a ser exercitado antes da falha.
 
-Não é o risco que a investigação anterior deste suporte apontava como suspeito
-principal (`packages/shell-exec/sandbox/macos`) -- esse caminho nem chega a
-ser exercitado antes da falha.
+**Estado atual (2026-09-07): a UI renderiza.** A quarta escolha acima --
+exigir `isInApplicationsFolder`/`moveToApplicationsFolder` só quando
+`platform === "darwin"` -- foi implementada e destravou a janela. Rodando
+`node scripts/run-windows.mjs`, o app abre a janela "Grok Bot" e renderiza a
+tela de login. Confirmado via DevTools Protocol lendo o DOM do processo
+renderer: `firstHeading: "Grok Bot"`, botão `"Sign in"`, e o texto `"Your team
+of always-on agents that you can give real work to."`, todos carregados de
+`.build/fidelity/app/dist/renderer/index.html`. Screenshot em
+[`docs/fork/assets/grok-bot-windows-render.png`](../assets/grok-bot-windows-render.png).
+Detalhe completo, incluindo por que a edição não é um afrouxamento, em
+[`docs/fork/WINDOWS.md`](../WINDOWS.md).
 
-**O próximo passo é conhecido e não foi feito.** Tornar
-`createProductionStartupBinding` ciente de plataforma -- pular a exigência de
-`isInApplicationsFolder`/`moveToApplicationsFolder` fora do `darwin`, do
-mesmo jeito que `moveToApplicationsFolderIfNeeded` já faz -- resolveria o
-bloqueio. Mas isso é edição em `source/`, o código reconstruído do
-**produto**, categoria diferente de editar scripts de build: os scripts são
-ferramenta deste fork, `source/` é a reconstrução que o dossiê inteiro trata
-como superfície a tocar o mínimo possível. Por isso fica registrado aqui como
-decisão pendente, e não como trabalho desta tarefa.
+O que isto **não** cobre: login de verdade (a tela renderiza, mas ninguém
+autenticou), qualquer funcionalidade além da tela inicial, e o sandbox
+(`packages/shell-exec/sandbox/macos`) continua sem contraparte Windows -- o
+que depender dele só se mede exercitando essas funcionalidades, o que ainda
+não aconteceu.
 
 ## Consequências
 
-- **A superfície de diff cresceu de 9 para 11 arquivos do upstream editados**,
-  além de sete arquivos novos (scripts e testes). O detalhe está em
+- **A superfície de diff cresceu de 9 para 11 arquivos do upstream editados**
+  na leva de bootstrap/build, além de sete arquivos novos (scripts e
+  testes) -- e agora mais uma edição pontual em `source/`
+  (`production-binding-providers.ts`), de categoria diferente das demais
+  porque toca o produto reconstruído, não a toolchain. O detalhe está em
   `docs/fork/CUSTOMIZATIONS.md`.
 - Windows tem hoje um caminho de desenvolvimento completo -- instalar, lint,
-  typecheck, testar, buildar -- mas não um caminho de uso: o app não chega a
-  mostrar UI. `docs/fork/WINDOWS.md` documenta o estado exato e o próximo
-  passo.
+  typecheck, testar, buildar -- e agora também um caminho de uso até a tela de
+  login: o app mostra UI. `docs/fork/WINDOWS.md` documenta o estado exato e o
+  que ainda não foi exercitado.
 - **O sandbox continua sem contraparte.** `packages/shell-exec/sandbox/macos`
-  é Seatbelt; nada disso foi exercitado, porque o processo morre antes de
-  qualquer funcionalidade rodar.
+  é Seatbelt; nada disso foi exercitado, porque nenhuma funcionalidade além da
+  tela inicial foi testada.
 - **Se o Windows for abandonado**, o ponto de reversão é claro: os 11
   arquivos marcados `[FORK]` mais os sete novos, listados em
-  `docs/fork/CUSTOMIZATIONS.md`. Nenhum deles altera comportamento em
+  `docs/fork/CUSTOMIZATIONS.md`, mais a edição em
+  `production-binding-providers.ts`. Nenhum deles altera comportamento em
   `darwin`, então reverter é seguro a qualquer momento sem tocar o caminho
   macOS.
-- Se alguém retomar isto, o próximo passo é a correção pendente acima em
-  `production-binding-providers.ts`, seguida de exercitar renderização,
-  autenticação e o restante da superfície que esta tarefa não chegou a
-  testar.
+- Se alguém retomar isto, o próximo passo é exercitar login real e o restante
+  da superfície do app -- inclusive qualquer caminho que dependa do sandbox --
+  que esta tarefa não chegou a testar.

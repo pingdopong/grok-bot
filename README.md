@@ -52,17 +52,17 @@ To **run or package** the application, additionally:
 The application is a macOS arm64 `.app`, and its renderer comes out of the pinned DMG. That makes
 the platform boundary sharper than "packaging is macOS-only" suggests:
 
-| Task                                   | Windows                                     | macOS arm64            |
-| -------------------------------------- | ------------------------------------------- | ---------------------- |
-| `pnpm install`, `lint`, `format:check` | yes                                         | yes                    |
-| `typecheck`, `source:typecheck`        | yes                                         | yes                    |
-| `test`                                 | yes                                         | yes                    |
-| `frontend:build`                       | yes                                         | yes                    |
-| `publication:check`                    | no — needs `/usr/bin/git` and `tar`         | yes                    |
-| Vite dev server for `frontend/`        | **no**                                      | yes, after `bootstrap` |
-| `bootstrap-windows` + `build`          | **yes**                                     | not applicable         |
-| `run:windows`                          | **partial** — starts, UI doesn't render yet | not applicable         |
-| `bootstrap`, `package`, `verify`       | no                                          | yes                    |
+| Task                                   | Windows                             | macOS arm64            |
+| -------------------------------------- | ----------------------------------- | ---------------------- |
+| `pnpm install`, `lint`, `format:check` | yes                                 | yes                    |
+| `typecheck`, `source:typecheck`        | yes                                 | yes                    |
+| `test`                                 | yes                                 | yes                    |
+| `frontend:build`                       | yes                                 | yes                    |
+| `publication:check`                    | no — needs `/usr/bin/git` and `tar` | yes                    |
+| Vite dev server for `frontend/`        | **no**                              | yes, after `bootstrap` |
+| `bootstrap-windows` + `build`          | **yes**                             | not applicable         |
+| `run:windows`                          | **yes** — renders the login screen  | not applicable         |
+| `bootstrap`, `package`, `verify`       | no                                  | yes                    |
 
 Two things are easy to miss:
 
@@ -75,8 +75,10 @@ Two things are easy to miss:
 
 So on Windows you get a real development loop over the reconstructed TypeScript — edit,
 typecheck, test, build — and, unlike before, a build that actually completes and an application
-that starts. It does not yet render a UI: the Electron main process aborts before creating a
-window, because a production-binding check requires two macOS-only APIs unconditionally. See
+that renders a UI: the window opens on the login screen, confirmed via the renderer DOM
+(`"Grok Bot"` heading, `"Sign in"` button) and a screenshot in
+[`docs/fork/assets/`](docs/fork/assets/grok-bot-windows-render.png). Real login, and anything
+past that first screen, has not been exercised — see
 [`docs/fork/WINDOWS.md`](docs/fork/WINDOWS.md) for the full trace and
 [ADR 0008](docs/fork/decisions/0008-suporte-a-windows.md) for the decisions behind this support.
 
