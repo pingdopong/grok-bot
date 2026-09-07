@@ -464,18 +464,33 @@ export function createElectronProductionNotificationsBinding(): NotificationsBin
 export function createProductionStartupBinding(
   ports: ElectronStartupProviderPorts,
 ): ElectronProductionStartupBindings {
+  // [FORK] platform precisa ser resolvido antes da validacao de precondicoes
+  // abaixo, porque duas delas agora dependem desse valor. ports.platform
+  // continua tendo precedencia sobre process.platform, igual antes, pois os
+  // testes usam esse override para injetar a plataforma.
+  const platform = ports.platform ?? process.platform;
   for (const [value, label] of [
     [ports?.app?.setPath, "electron.app.setPath()."],
     [ports?.app?.getPath, "electron.app.getPath()."],
-    [ports?.app?.isInApplicationsFolder, "electron.app.isInApplicationsFolder()."],
-    [ports?.app?.moveToApplicationsFolder, "electron.app.moveToApplicationsFolder()."],
     [ports?.app?.relaunch, "electron.app.relaunch()."],
     [ports?.app?.exit, "electron.app.exit()."],
     [ports?.dialog?.showMessageBox, "electron.dialog.showMessageBox()."],
   ] as const) requireFunction(value, label);
+  // [FORK] isInApplicationsFolder/moveToApplicationsFolder sao exclusivas do
+  // macOS e nao existem no Electron para Windows/Linux, entao exigi-las em
+  // toda plataforma derrubava o boot no Windows antes de criar a janela. O
+  // unico consumidor, moveToApplicationsFolderIfNeeded (em
+  // startup/move-to-applications-folder.ts), ja retorna cedo quando
+  // platform !== "darwin" e nunca chama essas duas funcoes fora do macOS, entao
+  // a precondicao aqui passa a espelhar exatamente esse gate.
+  if (platform === "darwin") {
+    for (const [value, label] of [
+      [ports?.app?.isInApplicationsFolder, "electron.app.isInApplicationsFolder()."],
+      [ports?.app?.moveToApplicationsFolder, "electron.app.moveToApplicationsFolder()."],
+    ] as const) requireFunction(value, label);
+  }
   const argv = ports.argv ?? process.argv;
   const env = ports.env ?? process.env;
-  const platform = ports.platform ?? process.platform;
   const buffered: Array<{ readonly level: Parameters<ProductionTelemetrySink["reportDesktopStartup"]>[0]; readonly metadata: Parameters<ProductionTelemetrySink["reportDesktopStartup"]>[1] }> = [];
   let telemetry: ProductionTelemetrySink | undefined;
   const report: ElectronProductionStartupBindings["report"] = (level, metadata) => {
