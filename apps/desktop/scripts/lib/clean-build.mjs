@@ -270,6 +270,11 @@ export async function overlayCleanDistribution(outputRoot, { stageRoot = stagedA
     await cp(path.join(outputRoot, relative), destination, { recursive: true, dereference: false, preserveTimestamps: true });
   }
   for (const relative of [...packagedArtifactFallbacks(composition), "dist/node-deps", "dist/reconstruction-build.json"]) {
+    // [FORK] No Windows dist/node-deps nao e estagiado de proposito: os daemons
+    // resolvem dist/deps, que vem do instalador. Ver o guarda em
+    // scripts/build-tree-sitter-node.mjs e docs/fork/WINDOWS.md. Fora do
+    // Windows a ausencia continua sendo erro.
+    if (process.platform === "win32" && relative === "dist/node-deps") continue;
     const destination = path.join(stageRoot, relative);
     await rm(destination, { recursive: true, force: true });
     await mkdir(path.dirname(destination), { recursive: true });

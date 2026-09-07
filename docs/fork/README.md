@@ -29,9 +29,10 @@ git diff --find-renames --numstat upstream-mirror..main | awk '$1!="0" || $2!="0
 `upstream-mirror` e um branch com a historia do upstream intocada. Ele nunca e
 editado; a unica escrita legitima nele e um fast-forward vindo do upstream.
 
-Estado em 2026-08-31: **cinco arquivos do upstream editados**, todos em
-`apps/desktop/scripts/`, somando cerca de trinta linhas. O resto e arquivo novo
-nosso ou remocao registrada.
+Estado em 2026-09-06: **onze arquivos do upstream editados**, espalhados entre
+`apps/desktop/` (raiz), `apps/desktop/scripts/`, `apps/desktop/scripts/lib/` e
+`apps/desktop/tests/` -- ver `CUSTOMIZATIONS.md` para o detalhe arquivo a
+arquivo. O resto e arquivo novo nosso ou remocao registrada.
 
 ## Como sincronizar, se o upstream voltar a andar
 

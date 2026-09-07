@@ -12,14 +12,17 @@ sempre.
 
 Todas marcadas com `[FORK]` no proprio arquivo.
 
-| Arquivo                                               | Linhas | Motivo                                     | Upstreamavel? |
-| ----------------------------------------------------- | ------ | ------------------------------------------ | ------------- |
-| `apps/desktop/scripts/apply-third-party-patches.mjs`  | +4 -1  | resolucao de `node_modules`                | sim           |
-| `apps/desktop/scripts/build-tree-sitter-electron.mjs` | +7 -3  | idem                                       | sim           |
-| `apps/desktop/scripts/build-tree-sitter-node.mjs`     | +6 -3  | idem                                       | sim           |
-| `apps/desktop/scripts/lib/asar-integrity.mjs`         | +3 -1  | idem                                       | sim           |
-| `apps/desktop/scripts/verify-publication-tree.mjs`    | +6 -1  | comparacao de arvore relativa ao diretorio | sim           |
-| `apps/desktop/scripts/lib/config.mjs`                 | +14 -8 | identidade vem do manifesto de marca       | nao           |
+| Arquivo                                                        | Linhas | Motivo                                                            | Upstreamavel? |
+| -------------------------------------------------------------- | ------ | ----------------------------------------------------------------- | ------------- |
+| `apps/desktop/scripts/apply-third-party-patches.mjs`           | +4 -1  | resolucao de `node_modules`                                       | sim           |
+| `apps/desktop/scripts/electron-main-production-activation.mjs` | +4 -1  | resolucao de `node_modules` (5o call site da mesma classe)        | sim           |
+| `apps/desktop/scripts/build-tree-sitter-electron.mjs`          | +7 -3  | idem                                                              | sim           |
+| `apps/desktop/scripts/build-tree-sitter-node.mjs`              | +22 -5 | idem, e guarda `win32` para nao compilar ABI Node no Windows      | sim           |
+| `apps/desktop/scripts/lib/build-asar.mjs`                      | +4 -3  | resolve o `dist/` unpacked por plataforma                         | sim           |
+| `apps/desktop/scripts/lib/clean-build.mjs`                     | +5 -0  | nao sobrepoe `dist/node-deps` no Windows                          | sim           |
+| `apps/desktop/scripts/lib/asar-integrity.mjs`                  | +17 -4 | idem, e normaliza separadores de caminho na verificacao (Windows) | sim           |
+| `apps/desktop/scripts/verify-publication-tree.mjs`             | +6 -1  | comparacao de arvore relativa ao diretorio                        | sim           |
+| `apps/desktop/scripts/lib/config.mjs`                          | +14 -8 | identidade vem do manifesto de marca                              | nao           |
 
 **Resolucao de `node_modules`.** Os scripts fixavam `<repoRoot>/node_modules`,
 que so existe em clone avulso. Qualquer workspace -- pnpm hasteado ou npm
@@ -27,6 +30,34 @@ workspaces -- move as dependencias para o `node_modules` da raiz. A correcao est
 concentrada em `apps/desktop/scripts/lib/node-modules.mjs` (arquivo novo), e cada
 chamada virou substituicao de uma linha. Fazer o toolchain funcionar em monorepo
 e melhoria geral: vale abrir upstream se o repositorio sair do arquivamento.
+`electron-main-production-activation.mjs` e o quinto call site desta mesma
+classe, corrigido durante o suporte a Windows (ADR 0008).
+
+**Unpacked por plataforma.** `lib/build-asar.mjs` resolve o diretorio
+`dist/` unpacked via `lib/runtime-unpacked.mjs` (arquivo novo) em vez de um
+caminho fixo, porque o instalador Windows e o `.app` do macOS empacotam o
+runtime em layouts diferentes. Esta linha faltava nesta tabela desde o
+trabalho de bootstrap Windows; a contagem de arquivos editados ja a incluia.
+
+**Nao compilar ABI Node no Windows.** `build-tree-sitter-node.mjs` ganhou uma
+guarda de `process.platform === "win32"` em `stageNodeTreeSitterRuntime`: o
+`link.exe` da Microsoft rejeita as flags que o `lld` do Node 26 produz
+(`LNK1117`), e nao ha necessidade de compilar, porque `ELECTRON_RUN_AS_NODE=1`
+preserva `process.versions.electron`, entao o run empacotado resolve
+`dist/deps` -- que ja vem compilado no instalador Windows. Consequencia direta:
+`lib/clean-build.mjs` parou de sobrepor `dist/node-deps` no Windows, senao a
+limpeza apagaria o que a guarda decidiu nao reconstruir.
+
+**Separadores de caminho na integridade do ASAR.** `lib/asar-integrity.mjs`
+normaliza os caminhos que `listPackage()`/`statFile()` do `@electron/asar`
+devolvem no Windows. Esta e a edicao mais sensivel desta leva: antes dela, a
+verificacao de integridade acusava falsamente **todos os 934 arquivos** do
+pacote como ausentes, porque `statFile()` anda a arvore interna do asar via
+`path.sep` nativo, e converter tudo para `/` antes de chamar quebra esse
+split no Windows. Uma revisao comprovou empiricamente que a correcao
+**restaura** a verificacao -- adulteracao, ausencia e entrada extra continuam
+sendo detectadas -- e ha teste cobrindo isso
+(`apps/desktop/tests/fork-asar-integrity.test.mjs`).
 
 **Comparacao de arvore.** `verify-publication-tree.mjs` comparava o export com
 `HEAD^{tree}`, que e sempre a arvore da **raiz** do repositorio, enquanto o
@@ -58,19 +89,25 @@ deste fork por definicao.
 
 Nao conflitam com o upstream: ele nao conhece esses caminhos.
 
-| Caminho                                                   | Para que serve                        |
-| --------------------------------------------------------- | ------------------------------------- |
-| `ATTRIBUTION.md`                                          | origem, baseline, nao-afiliacao       |
-| `README.md` (raiz)                                        | face publica do fork                  |
-| `SECURITY.md`, `CONTRIBUTING.md` (raiz)                   | politica deste fork                   |
-| `packages/brand/`                                         | manifesto de marca                    |
-| `scripts/brand-sweep.sh`                                  | varredura de marca, em modo relatorio |
-| `apps/desktop/scripts/lib/node-modules.mjs`               | resolvedor de `node_modules`          |
-| `apps/desktop/tests/fork-*.test.mjs`                      | testes de customizacao do fork        |
-| `turbo.json`, `pnpm-workspace.yaml`, `tsconfig.base.json` | monorepo                              |
-| `.oxlintrc.json`, `.oxfmtrc.json`, `lefthook.yml`         | qualidade                             |
-| `.github/workflows/*`, `.github/dependabot.yml`           | CI                                    |
-| `docs/fork/`                                              | este dossie                           |
+| Caminho                                                   | Para que serve                                                        |
+| --------------------------------------------------------- | --------------------------------------------------------------------- |
+| `ATTRIBUTION.md`                                          | origem, baseline, nao-afiliacao                                       |
+| `README.md` (raiz)                                        | face publica do fork                                                  |
+| `SECURITY.md`, `CONTRIBUTING.md` (raiz)                   | politica deste fork                                                   |
+| `packages/brand/`                                         | manifesto de marca                                                    |
+| `scripts/brand-sweep.sh`                                  | varredura de marca, em modo relatorio                                 |
+| `apps/desktop/scripts/lib/node-modules.mjs`               | resolvedor de `node_modules`                                          |
+| `apps/desktop/scripts/lib/windows-config.mjs`             | identidades e caminhos do build Windows                               |
+| `apps/desktop/scripts/lib/node-gyp.mjs`                   | invoca o entrypoint JS do node-gyp (spawn de `.cmd` falha no Windows) |
+| `apps/desktop/scripts/lib/runtime-unpacked.mjs`           | resolve o `dist/` unpacked por plataforma                             |
+| `apps/desktop/scripts/ensure-electron-binary.mjs`         | provisiona o binario do Electron, validando o resultado               |
+| `apps/desktop/scripts/run-windows.mjs`                    | executa o app reconstruido no Windows sem empacotar                   |
+| `apps/desktop/scripts/bootstrap-windows.mjs`              | bootstrap Windows a partir do instalador NSIS                         |
+| `apps/desktop/tests/fork-*.test.mjs`                      | testes de customizacao do fork                                        |
+| `turbo.json`, `pnpm-workspace.yaml`, `tsconfig.base.json` | monorepo                                                              |
+| `.oxlintrc.json`, `.oxfmtrc.json`, `lefthook.yml`         | qualidade                                                             |
+| `.github/workflows/*`, `.github/dependabot.yml`           | CI                                                                    |
+| `docs/fork/`                                              | este dossie                                                           |
 
 ## Acoplamentos que este fork criou
 

@@ -69,6 +69,20 @@ export async function ensureNodeTreeSitterRuntime() {
 }
 
 export async function stageNodeTreeSitterRuntime(outputRoot) {
+  // [FORK] No Windows nao compilamos tree-sitter para o ABI do Node.
+  //
+  // shell-parser.ts escolhe o dominio de dependencia nativa em runtime: com
+  // process.versions.electron definido usa dist/deps, senao node-deps. Os
+  // daemons sobem via process.execPath com ELECTRON_RUN_AS_NODE=1, e nesse modo
+  // process.versions.electron CONTINUA definido (verificado: 42.1.0, ABI 146).
+  // Logo o run empacotado resolve dist/deps -- que vem do instalador fixado --
+  // e node-deps nunca e carregado.
+  //
+  // Estagiar binarios de ABI errado seria pior que nao estagiar: se algum
+  // caminho futuro rodar sob Node de sistema, o proprio projeto falha com
+  // SAND_TREE_SITTER_RUNTIME_UNAVAILABLE, que e explicito.
+  if (process.platform === "win32") return null;
+
   const cacheRoot = await ensureNodeTreeSitterRuntime();
   const destination = path.join(outputRoot, "dist", "node-deps");
   await rm(destination, { recursive: true, force: true });
